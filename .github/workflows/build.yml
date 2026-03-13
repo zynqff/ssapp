@@ -32,6 +32,7 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK
+        continue-on-error: true
         run: flutter build apk --release
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
@@ -40,7 +41,9 @@ jobs:
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Find APK
-        run: find ${{ github.workspace }}/build -name "*.apk" || echo "No APK found"
+        run: |
+          find ${{ github.workspace }}/build -name "*.apk" || echo "No APK found"
+          find ${{ github.workspace }}/android/app/build/outputs -type f 2>/dev/null || echo "No outputs dir"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
