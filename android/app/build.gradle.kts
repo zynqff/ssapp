@@ -26,10 +26,37 @@ android {
         versionName = flutter.versionName
     }
 
+    // --- БЛОК ПОДПИСИ ПРИЛОЖЕНИЯ ---
+    signingConfigs {
+        create("release") {
+            // Эти переменные подтянутся из твоего YAML-скрипта на GitHub
+            keyAlias = System.getenv("KEY_ALIAS")
+            keyPassword = System.getenv("KEY_PASSWORD")
+            storePassword = System.getenv("KEYSTORE_PASSWORD")
+            
+            val ksPath = System.getenv("KEYSTORE_PATH")
+            if (!ksPath.isNullOrEmpty()) {
+                storeFile = file(ksPath)
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Используем созданную выше конфигурацию "release"
+            signingConfig = signingConfigs.getByName("release")
+            
+            // Оптимизация и сжатие кода (рекомендуется для релизных APK)
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
+        }
+        
+        debug {
             signingConfig = signingConfigs.getByName("debug")
-            isMinifyEnabled = false
         }
     }
 }
