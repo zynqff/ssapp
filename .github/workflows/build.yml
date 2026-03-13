@@ -2,17 +2,15 @@ name: Build APK
 
 on:
   push:
-    branches: [ main ]
     tags:
       - 'v*'
-  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
 
       - name: Setup Java
@@ -24,26 +22,31 @@ jobs:
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
         with:
-          flutter-version: '3.29.0'
-          cache: true
+          flutter-version: '3.41.4'
 
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Decode keystore
+        run: |
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
+
       - name: Build APK
         run: flutter build apk --release
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Upload APK as artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sscollective-app-release
-          path: build/app/outputs/flutter-apk/app-release.apk
-
-      - name: Release APK (only on tag)
-        if: startsWith(github.ref, 'refs/tags/')
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: build/app/outputs/flutter-apk/app-release.apk
-          name: "Сборник стихов ${{ github.ref_name }}"
+          name: SSApp ${{ github.ref_name }}
+          body: |
+            - Added Russian language (Initial translation. May be rough)
+            - Full Russification
+            - If you have any corrections or want to help with the translation into Russian and other languages, contact: zynqff@gmail.com
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
