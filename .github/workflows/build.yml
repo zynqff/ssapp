@@ -35,7 +35,7 @@ jobs:
         run: flutter build apk --release
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
