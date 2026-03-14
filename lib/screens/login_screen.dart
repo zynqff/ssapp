@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -58,114 +59,238 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 28),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const SizedBox(height: 24),
-                Icon(Icons.menu_book_outlined, size: 72, color: t.colorScheme.primary),
-                const SizedBox(height: 16),
-                Text('Сборник стихов',
-                    style: t.textTheme.headlineMedium
-                        ?.copyWith(fontWeight: FontWeight.bold)),
-                const SizedBox(height: 8),
-                Text(_isRegister ? 'Создать аккаунт' : 'Добро пожаловать',
-                    style: t.textTheme.bodyLarge
-                        ?.copyWith(color: t.colorScheme.onSurfaceVariant)),
                 const SizedBox(height: 32),
 
-                TextField(
-                  controller: _userCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Имя пользователя',
-                    prefixIcon: Icon(Icons.person_outline),
-                    border: OutlineInputBorder(),
+                // Icon
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: cs.primary.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(24),
+                    border: Border.all(
+                      color: cs.primary.withOpacity(0.3),
+                      width: 1.2,
+                    ),
                   ),
-                  textInputAction: TextInputAction.next,
+                  child: Icon(Icons.menu_book_outlined,
+                      size: 38, color: cs.primary),
+                ),
+                const SizedBox(height: 20),
+
+                // Title
+                Text(
+                  'Сборник стихов',
+                  style: GoogleFonts.playfairDisplay(
+                    color: cs.onSurface,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _isRegister ? 'Создать аккаунт' : 'Добро пожаловать',
+                  style: GoogleFonts.notoSerif(
+                    color: cs.onSurfaceVariant,
+                    fontSize: 14,
+                    fontStyle: FontStyle.italic,
+                  ),
+                ),
+                const SizedBox(height: 36),
+
+                // Username field
+                _StyledField(
+                  controller: _userCtrl,
+                  label: 'Имя пользователя',
+                  icon: Icons.person_outline_rounded,
+                  action: TextInputAction.next,
                 ),
                 const SizedBox(height: 12),
-                TextField(
+
+                // Password field
+                _StyledField(
                   controller: _passCtrl,
-                  obscureText: _obscure,
-                  decoration: InputDecoration(
-                    labelText: 'Пароль',
-                    prefixIcon: const Icon(Icons.lock_outline),
-                    border: const OutlineInputBorder(),
-                    suffixIcon: IconButton(
-                      icon: Icon(_obscure ? Icons.visibility_off : Icons.visibility),
-                      onPressed: () => setState(() => _obscure = !_obscure),
-                    ),
-                  ),
-                  textInputAction: TextInputAction.done,
+                  label: 'Пароль',
+                  icon: Icons.lock_outline_rounded,
+                  obscure: _obscure,
+                  action: TextInputAction.done,
                   onSubmitted: (_) => _submit(),
+                  suffix: IconButton(
+                    icon: Icon(
+                      _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      size: 20,
+                      color: cs.onSurfaceVariant,
+                    ),
+                    onPressed: () => setState(() => _obscure = !_obscure),
+                  ),
                 ),
 
+                // Error
                 if (_error != null) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Container(
-                    padding: const EdgeInsets.all(10),
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: t.colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
+                      color: cs.error.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: cs.error.withOpacity(0.3), width: 0.8),
                     ),
                     child: Row(children: [
-                      Icon(Icons.error_outline, color: t.colorScheme.onErrorContainer, size: 16),
+                      Icon(Icons.error_outline_rounded,
+                          color: cs.error, size: 16),
                       const SizedBox(width: 8),
-                      Expanded(child: Text(_error!,
-                          style: TextStyle(color: t.colorScheme.onErrorContainer))),
+                      Expanded(
+                        child: Text(
+                          _error!,
+                          style: GoogleFonts.notoSerif(
+                              color: cs.error, fontSize: 13),
+                        ),
+                      ),
                     ]),
                   ),
                 ],
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
+                // Submit button
                 SizedBox(
                   width: double.infinity,
+                  height: 50,
                   child: FilledButton(
                     onPressed: _loading ? null : _submit,
                     child: _loading
-                        ? const SizedBox(height: 20, width: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2))
-                        : Text(_isRegister ? 'Зарегистрироваться' : 'Войти'),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                Row(children: [
-                  const Expanded(child: Divider()),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('или', style: t.textTheme.bodySmall),
-                  ),
-                  const Expanded(child: Divider()),
-                ]),
-                const SizedBox(height: 12),
-
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _loading ? null : _googleLogin,
-                    icon: const Icon(Icons.g_mobiledata, size: 24),
-                    label: const Text('Войти через Google'),
+                        ? SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: cs.onPrimary),
+                          )
+                        : Text(
+                            _isRegister ? 'Зарегистрироваться' : 'Войти',
+                            style: GoogleFonts.notoSerif(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600),
+                          ),
                   ),
                 ),
                 const SizedBox(height: 16),
 
-                TextButton(
-                  onPressed: () => setState(() { _isRegister = !_isRegister; _error = null; }),
-                  child: Text(_isRegister
-                      ? 'Уже есть аккаунт? Войти'
-                      : 'Нет аккаунта? Зарегистрироваться'),
+                // Divider
+                Row(children: [
+                  Expanded(
+                      child: Divider(color: cs.outline.withOpacity(0.5))),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 14),
+                    child: Text('или',
+                        style: GoogleFonts.notoSerif(
+                            color: cs.onSurfaceVariant, fontSize: 13)),
+                  ),
+                  Expanded(
+                      child: Divider(color: cs.outline.withOpacity(0.5))),
+                ]),
+                const SizedBox(height: 16),
+
+                // Google button
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: OutlinedButton.icon(
+                    onPressed: _loading ? null : _googleLogin,
+                    icon: Icon(Icons.g_mobiledata,
+                        size: 26, color: cs.primary),
+                    label: Text(
+                      'Войти через Google',
+                      style: GoogleFonts.notoSerif(
+                          fontSize: 14,
+                          color: cs.primary),
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
+
+                // Toggle register/login
+                TextButton(
+                  onPressed: () => setState(() {
+                    _isRegister = !_isRegister;
+                    _error = null;
+                  }),
+                  child: Text(
+                    _isRegister
+                        ? 'Уже есть аккаунт? Войти'
+                        : 'Нет аккаунта? Зарегистрироваться',
+                    style: GoogleFonts.notoSerif(
+                        color: cs.primary, fontSize: 13),
+                  ),
+                ),
+                const SizedBox(height: 32),
               ],
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _StyledField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final bool obscure;
+  final TextInputAction action;
+  final ValueChanged<String>? onSubmitted;
+  final Widget? suffix;
+
+  const _StyledField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.obscure = false,
+    this.action = TextInputAction.next,
+    this.onSubmitted,
+    this.suffix,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      textInputAction: action,
+      onSubmitted: onSubmitted,
+      style: GoogleFonts.notoSerif(color: cs.onSurface, fontSize: 14),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.notoSerif(
+            color: cs.onSurfaceVariant, fontSize: 13),
+        prefixIcon: Icon(icon, color: cs.onSurfaceVariant, size: 20),
+        suffixIcon: suffix,
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: cs.outline, width: 0.9),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: cs.primary, width: 1.5),
+        ),
+        filled: true,
+        fillColor: cs.surfaceVariant.withOpacity(0.5),
+        contentPadding:
+            const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       ),
     );
   }
