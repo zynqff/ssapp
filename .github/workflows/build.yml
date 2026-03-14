@@ -29,14 +29,20 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      - name: Setup Gradle wrapper
+        run: |
+          curl -L -o android/gradle/wrapper/gradle-wrapper.jar \
+            https://github.com/gradle/gradle/raw/v8.6.0/gradle/wrapper/gradle-wrapper.jar
+          cp android/gradlew . 2>/dev/null || curl -L -o android/gradlew \
+            https://raw.githubusercontent.com/gradle/gradle/v8.6.0/gradlew
+          chmod +x android/gradlew
+
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK
-        run: |
-          cd android
-          ./gradlew assembleRelease --stacktrace 2>&1
+        run: flutter build apk --release --android-skip-build-dependency-validation
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
