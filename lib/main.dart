@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'providers/auth_provider.dart';
 import 'screens/poems_screen.dart';
+import 'screens/login_screen.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -15,7 +16,7 @@ class _App extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
-      title: 'Сборник стихов',
+      title: 'Сборник Стихов',
       debugShowCheckedModeBanner: false,
       theme: _theme(Brightness.light),
       darkTheme: _theme(Brightness.dark),
@@ -38,13 +39,14 @@ class _App extends ConsumerWidget {
 
 class _Root extends ConsumerWidget {
   const _Root();
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     return auth.when(
       loading: () => const Scaffold(body: Center(child: CircularProgressIndicator())),
       error: (_, __) => const PoemsScreen(),
-      data: (_) => const PoemsScreen(),
+      data: (user) => user != null ? const PoemsScreen() : const LoginScreen(),
     );
   }
 }
