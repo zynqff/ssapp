@@ -86,7 +86,7 @@ class _App extends ConsumerWidget {
         ),
         iconTheme: IconThemeData(color: onBg, size: 22),
       ),
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: surfaceColor,
         elevation: 0,
         shape: RoundedRectangleBorder(
