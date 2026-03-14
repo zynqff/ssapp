@@ -29,12 +29,9 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      - name: Setup Gradle wrapper
+      - name: Create gradlew
         run: |
-          curl -L -o android/gradle/wrapper/gradle-wrapper.jar \
-            https://github.com/gradle/gradle/raw/v8.6.0/gradle/wrapper/gradle-wrapper.jar
-          cp android/gradlew . 2>/dev/null || curl -L -o android/gradlew \
-            https://raw.githubusercontent.com/gradle/gradle/v8.6.0/gradlew
+          ls android/gradlew 2>/dev/null || (cd android && gradle wrapper --gradle-version 8.6)
           chmod +x android/gradlew
 
       - name: Decode keystore
@@ -42,7 +39,9 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK
-        run: flutter build apk --release --android-skip-build-dependency-validation
+        run: |
+          cd android
+          ./gradlew assembleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -52,7 +51,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ github.workspace }}/android/app/build/outputs/flutter-apk/app-release.apk
+          files: ${{ github.workspace }}/android/app/build/outputs/apk/release/app-release.apk
           name: SSApp ${{ github.ref_name }}
           body: |
             - Added Russian language (Initial translation. May be rough)
