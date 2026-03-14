@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
 import '../models/chat_message.dart';
@@ -36,7 +37,8 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scroll.hasClients) {
         _scroll.animateTo(_scroll.position.maxScrollExtent,
-            duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+            duration: const Duration(milliseconds: 300),
+            curve: Curves.easeOut);
       }
     });
   }
@@ -62,60 +64,153 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(authProvider).value;
-    if (user == null) return const Scaffold(body: Center(child: Text('Войдите')));
+    if (user == null) {
+      return const Scaffold(body: Center(child: Text('Войдите')));
+    }
     final msgs = ref.watch(chatProvider(user.username));
-    final t = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('AI Ассистент'),
+        leading: IconButton(
+          icon: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: cs.surfaceVariant,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outline, width: 0.8),
+            ),
+            child: Icon(Icons.arrow_back_rounded,
+                color: cs.onSurface, size: 18),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: cs.primary.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.smart_toy_outlined,
+                size: 18, color: cs.primary),
+          ),
+          const SizedBox(width: 10),
+          Text('AI Ассистент',
+              style: GoogleFonts.playfairDisplay(
+                color: cs.onSurface,
+                fontSize: 18,
+                fontWeight: FontWeight.w600,
+              )),
+        ]),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () async {
+          GestureDetector(
+            onTap: () async {
               final ok = await showDialog<bool>(
                 context: context,
                 builder: (_) => AlertDialog(
-                  title: const Text('Очистить историю?'),
+                  backgroundColor: cs.surfaceVariant,
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(18)),
+                  title: Text('Очистить историю?',
+                      style: GoogleFonts.playfairDisplay(
+                          color: cs.onSurface,
+                          fontWeight: FontWeight.w600)),
                   actions: [
-                    TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Отмена')),
-                    FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('Очистить')),
+                    TextButton(
+                      onPressed: () => Navigator.pop(context, false),
+                      child: Text('Отмена',
+                          style: GoogleFonts.notoSerif(
+                              color: cs.onSurfaceVariant)),
+                    ),
+                    FilledButton(
+                      onPressed: () => Navigator.pop(context, true),
+                      child: Text('Очистить',
+                          style: GoogleFonts.notoSerif()),
+                    ),
                   ],
                 ),
               );
-              if (ok == true) ref.read(chatProvider(user.username).notifier).clear();
+              if (ok == true) {
+                ref
+                    .read(chatProvider(user.username).notifier)
+                    .clear();
+              }
             },
+            child: Container(
+              width: 38,
+              height: 38,
+              margin: const EdgeInsets.only(right: 12),
+              decoration: BoxDecoration(
+                color: cs.surfaceVariant,
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: cs.outline, width: 0.8),
+              ),
+              child: Icon(Icons.delete_outline_rounded,
+                  color: cs.onSurface, size: 18),
+            ),
           ),
         ],
       ),
       body: Column(children: [
+        // Offline banner
         if (_offline)
-          _Banner(
-              icon: Icons.wifi_off,
-              message: 'Нет интернета — AI недоступен',
-              color: t.colorScheme.errorContainer,
-              textColor: t.colorScheme.onErrorContainer),
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            color: cs.error.withOpacity(0.1),
+            child: Row(children: [
+              Icon(Icons.wifi_off_rounded,
+                  size: 15, color: cs.error),
+              const SizedBox(width: 8),
+              Text('Нет интернета — AI недоступен',
+                  style: GoogleFonts.notoSerif(
+                      color: cs.error, fontSize: 12.5)),
+            ]),
+          ),
 
+        // Messages
         Expanded(
           child: msgs.when(
-            loading: () => const Center(child: CircularProgressIndicator()),
-            error: (e, _) => Center(child: Text(e.toString())),
+            loading: () => Center(
+                child: CircularProgressIndicator(color: cs.primary)),
+            error: (e, _) => Center(
+                child: Text(e.toString(),
+                    style: GoogleFonts.notoSerif(
+                        color: cs.onSurfaceVariant))),
             data: (list) {
               if (list.isEmpty) {
                 return Center(
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Icon(Icons.smart_toy_outlined, size: 72,
-                        color: t.colorScheme.onSurfaceVariant),
-                    const SizedBox(height: 16),
-                    Text('Спроси что-нибудь о стихах',
-                        style: t.textTheme.bodyLarge),
-                  ]),
+                  child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Container(
+                          width: 72,
+                          height: 72,
+                          decoration: BoxDecoration(
+                            color: cs.primary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(22),
+                          ),
+                          child: Icon(Icons.smart_toy_outlined,
+                              size: 36, color: cs.primary),
+                        ),
+                        const SizedBox(height: 16),
+                        Text('Спроси что-нибудь о стихах',
+                            style: GoogleFonts.notoSerif(
+                              color: cs.onSurfaceVariant,
+                              fontSize: 14,
+                              fontStyle: FontStyle.italic,
+                            )),
+                      ]),
                 );
               }
               _scrollToBottom();
               return ListView.builder(
                 controller: _scroll,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                 itemCount: list.length + (_sending ? 1 : 0),
                 itemBuilder: (ctx, i) {
                   if (i == list.length) return const _TypingBubble();
@@ -126,6 +221,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           ),
         ),
 
+        // Input bar
         _InputBar(
           ctrl: _ctrl,
           sending: _sending,
@@ -137,64 +233,7 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
   }
 }
 
-class _Banner extends StatelessWidget {
-  final IconData icon;
-  final String message;
-  final Color color, textColor;
-  const _Banner({required this.icon, required this.message, required this.color, required this.textColor});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        width: double.infinity,
-        color: color,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-        child: Row(children: [
-          Icon(icon, size: 16, color: textColor),
-          const SizedBox(width: 8),
-          Text(message, style: TextStyle(color: textColor, fontSize: 13)),
-        ]),
-      );
-}
-
-class _InputBar extends StatelessWidget {
-  final TextEditingController ctrl;
-  final bool sending, disabled;
-  final VoidCallback onSend;
-  const _InputBar({required this.ctrl, required this.sending, required this.disabled, required this.onSend});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(
-          border: Border(top: BorderSide(color: Colors.black12))),
-      child: Row(children: [
-        Expanded(
-          child: TextField(
-            controller: ctrl,
-            decoration: const InputDecoration(
-                hintText: 'Сообщение...',
-                border: OutlineInputBorder(),
-                contentPadding:
-                    EdgeInsets.symmetric(horizontal: 16, vertical: 12)),
-            maxLines: null,
-            textInputAction: TextInputAction.send,
-            onSubmitted: (_) => onSend(),
-            enabled: !disabled,
-          ),
-        ),
-        const SizedBox(width: 8),
-        FilledButton(
-          onPressed: (sending || disabled) ? null : onSend,
-          child: sending
-              ? const SizedBox(width: 20, height: 20,
-                  child: CircularProgressIndicator(strokeWidth: 2))
-              : const Icon(Icons.send),
-        ),
-      ]),
-    );
-  }
-}
+// ── Chat bubble ───────────────────────────────────────────────────────────────
 
 class _Bubble extends StatelessWidget {
   final ChatMessage msg;
@@ -203,31 +242,44 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isUser = msg.role == 'user';
-    final t = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
+
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        constraints: BoxConstraints(
+            maxWidth: MediaQuery.of(context).size.width * 0.76),
         decoration: BoxDecoration(
-          color: isUser ? t.colorScheme.primary : t.colorScheme.secondaryContainer,
+          color: isUser
+              ? cs.primary
+              : cs.surfaceVariant,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: const Radius.circular(16),
             bottomLeft: Radius.circular(isUser ? 16 : 4),
             bottomRight: Radius.circular(isUser ? 4 : 16),
           ),
+          border: isUser
+              ? null
+              : Border.all(color: cs.outline, width: 0.8),
         ),
-        child: Text(msg.content,
-            style: TextStyle(
-                color: isUser
-                    ? t.colorScheme.onPrimary
-                    : t.colorScheme.onSecondaryContainer)),
+        child: Text(
+          msg.content,
+          style: GoogleFonts.notoSerif(
+            color: isUser ? cs.onPrimary : cs.onSurface,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
       ),
     );
   }
 }
+
+// ── Typing indicator ──────────────────────────────────────────────────────────
 
 class _TypingBubble extends StatefulWidget {
   const _TypingBubble();
@@ -255,18 +307,21 @@ class _TypingBubbleState extends State<_TypingBubble>
 
   @override
   Widget build(BuildContext context) {
-    final t = Theme.of(context);
+    final cs = Theme.of(context).colorScheme;
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
         decoration: BoxDecoration(
-          color: t.colorScheme.secondaryContainer,
+          color: cs.surfaceVariant,
           borderRadius: const BorderRadius.only(
-            topLeft: Radius.circular(16), topRight: Radius.circular(16),
-            bottomRight: Radius.circular(16), bottomLeft: Radius.circular(4),
+            topLeft: Radius.circular(16),
+            topRight: Radius.circular(16),
+            bottomRight: Radius.circular(16),
+            bottomLeft: Radius.circular(4),
           ),
+          border: Border.all(color: cs.outline, width: 0.8),
         ),
         child: AnimatedBuilder(
           animation: _ctrl,
@@ -280,9 +335,10 @@ class _TypingBubbleState extends State<_TypingBubble>
                 child: Opacity(
                   opacity: opacity.clamp(0.3, 1.0),
                   child: Container(
-                    width: 8, height: 8,
+                    width: 8,
+                    height: 8,
                     decoration: BoxDecoration(
-                      color: t.colorScheme.onSecondaryContainer,
+                      color: cs.primary,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -292,6 +348,85 @@ class _TypingBubbleState extends State<_TypingBubble>
           ),
         ),
       ),
+    );
+  }
+}
+
+// ── Input bar ─────────────────────────────────────────────────────────────────
+
+class _InputBar extends StatelessWidget {
+  final TextEditingController ctrl;
+  final bool sending, disabled;
+  final VoidCallback onSend;
+  const _InputBar({
+    required this.ctrl,
+    required this.sending,
+    required this.disabled,
+    required this.onSend,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        border: Border(
+            top: BorderSide(
+                color: cs.outline.withOpacity(0.3), width: 0.8)),
+      ),
+      child: Row(children: [
+        Expanded(
+          child: Container(
+            decoration: BoxDecoration(
+              color: cs.surfaceVariant,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: cs.outline, width: 0.8),
+            ),
+            child: TextField(
+              controller: ctrl,
+              style: GoogleFonts.notoSerif(
+                  color: cs.onSurface, fontSize: 14),
+              decoration: InputDecoration(
+                hintText: 'Сообщение...',
+                hintStyle: GoogleFonts.notoSerif(
+                    color: cs.onSurfaceVariant, fontSize: 14),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16, vertical: 12),
+              ),
+              maxLines: null,
+              textInputAction: TextInputAction.send,
+              onSubmitted: (_) => onSend(),
+              enabled: !disabled,
+            ),
+          ),
+        ),
+        const SizedBox(width: 10),
+        GestureDetector(
+          onTap: (sending || disabled) ? null : onSend,
+          child: AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 46,
+            height: 46,
+            decoration: BoxDecoration(
+              color: (sending || disabled)
+                  ? cs.primary.withOpacity(0.3)
+                  : cs.primary,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: sending
+                ? Padding(
+                    padding: const EdgeInsets.all(13),
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: cs.onPrimary),
+                  )
+                : Icon(Icons.send_rounded,
+                    color: cs.onPrimary, size: 20),
+          ),
+        ),
+      ]),
     );
   }
 }
