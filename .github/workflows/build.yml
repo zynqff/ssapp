@@ -34,7 +34,7 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK
-        run: flutter build apk --release
+        run: flutter build apk --release --android-skip-build-dependency-validation
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
