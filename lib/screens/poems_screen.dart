@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_staggered_animations/flutter_staggered_animations.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../providers/poems_provider.dart';
 import '../providers/auth_provider.dart';
+import '../providers/theme_provider.dart';
 import '../models/poem.dart';
 import '../widgets/poem_card.dart';
 import 'poem_detail_screen.dart';
@@ -20,11 +22,17 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
   late TabController _tabs;
   final _searchCtrl = TextEditingController();
   bool _showSearch = false;
+  int _selectedTab = 0;
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 3, vsync: this);
+    _tabs.addListener(() {
+      if (_tabs.index != _selectedTab) {
+        setState(() => _selectedTab = _tabs.index);
+      }
+    });
   }
 
   @override
@@ -40,119 +48,283 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
     final poemsAsync = ref.watch(poemsProvider);
     final filtered = ref.watch(filteredPoemsProvider);
     final isLoggedIn = user != null;
+    final accent = ref.watch(themeProvider).accent;
+    final bg = Theme.of(context).scaffoldBackgroundColor;
 
     return Scaffold(
-      appBar: AppBar(
-        title: _showSearch
-            ? TextField(
-                controller: _searchCtrl,
-                autofocus: true,
-                decoration: const InputDecoration(
-                    hintText: 'Поиск...', border: InputBorder.none),
-                onChanged: (v) =>
-                    ref.read(searchQueryProvider.notifier).state = v,
-              )
-            : const Text('Сборник стихов'),
-        actions: [
-          IconButton(
-            icon: Icon(_showSearch ? Icons.close : Icons.search),
-            onPressed: () {
-              setState(() => _showSearch = !_showSearch);
-              if (!_showSearch) {
-                _searchCtrl.clear();
-                ref.read(searchQueryProvider.notifier).state = '';
-              }
-            },
-          ),
-          if (isLoggedIn)
-            IconButton(
-              icon: const Icon(Icons.smart_toy_outlined),
-              tooltip: 'AI чат',
-              onPressed: () => Navigator.push(context,
-                  MaterialPageRoute(builder: (_) => const AiChatScreen())),
+      body: Column(
+        children: [
+          // ── Custom header ─────────────────────────────────────────────
+          Container(
+            color: bg,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 16, 0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Title row
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Expanded(
+                          child: AnimatedSwitcher(
+                            duration: const Duration(milliseconds: 200),
+                            child: _showSearch
+                                ? TextField(
+                                    key: const ValueKey('search'),
+                                    controller: _searchCtrl,
+                                    autofocus: true,
+                                    style: GoogleFonts.playfairDisplay(
+                                      color: Theme.of(context).colorScheme.onSurface,
+                                      fontSize: 22,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: 'Поиск...',
+                                      hintStyle: GoogleFonts.playfairDisplay(
+                                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        fontSize: 22,
+                                      ),
+                                      border: InputBorder.none,
+                                      isDense: true,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    onChanged: (v) =>
+                                        ref.read(searchQueryProvider.notifier).state = v,
+                                  )
+                                : Align(
+                                    key: const ValueKey('title'),
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      'Сборник стихов',
+                                      style: GoogleFonts.playfairDisplay(
+                                        color: Theme.of(context).colorScheme.onSurface,
+                                        fontSize: 26,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        _HeaderIcon(
+                          icon: _showSearch
+                              ? Icons.close_rounded
+                              : Icons.search_rounded,
+                          onTap: () {
+                            setState(() => _showSearch = !_showSearch);
+                            if (!_showSearch) {
+                              _searchCtrl.clear();
+                              ref.read(searchQueryProvider.notifier).state = '';
+                            }
+                          },
+                        ),
+                        if (isLoggedIn) ...[
+                          const SizedBox(width: 8),
+                          _HeaderIcon(
+                            icon: Icons.smart_toy_outlined,
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                  builder: (_) => const AiChatScreen()),
+                            ),
+                          ),
+                        ],
+                        const SizedBox(width: 8),
+                        _HeaderIcon(
+                          icon: Icons.person_outline_rounded,
+                          onTap: () => Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const ProfileScreen()),
+                          ),
+                        ),
+                      ],
+                    ),
+                    // Pill tabs
+                    if (isLoggedIn) ...[
+                      const SizedBox(height: 14),
+                      _PillTabs(
+                        labels: const ['Все', 'Непрочитанные', 'Прочитанные'],
+                        selected: _selectedTab,
+                        accent: accent,
+                        onSelect: (i) {
+                          _tabs.animateTo(i);
+                          setState(() => _selectedTab = i);
+                        },
+                      ),
+                    ],
+                    const SizedBox(height: 4),
+                  ],
+                ),
+              ),
             ),
-          IconButton(
-            icon: const Icon(Icons.person_outline),
-            onPressed: () => Navigator.push(context,
-                MaterialPageRoute(builder: (_) => const ProfileScreen())),
+          ),
+
+          // ── Body ──────────────────────────────────────────────────────
+          Expanded(
+            child: poemsAsync.when(
+              loading: () => Center(
+                child: CircularProgressIndicator(color: accent),
+              ),
+              error: (e, _) => _EmptyState(
+                icon: Icons.wifi_off_rounded,
+                message: e.toString(),
+                action: FilledButton.icon(
+                  onPressed: () => ref.read(poemsProvider.notifier).refresh(),
+                  icon: const Icon(Icons.refresh_rounded),
+                  label: const Text('Повторить'),
+                ),
+              ),
+              data: (_) => isLoggedIn
+                  ? TabBarView(
+                      controller: _tabs,
+                      children: [
+                        _PoemList(poems: filtered, user: user),
+                        _PoemList(
+                          poems: filtered
+                              .where((p) => !user.readPoems.contains(p.title))
+                              .toList(),
+                          user: user,
+                        ),
+                        _PoemList(
+                          poems: filtered
+                              .where((p) => user.readPoems.contains(p.title))
+                              .toList(),
+                          user: user,
+                        ),
+                      ],
+                    )
+                  : _PoemList(poems: filtered, user: null),
+            ),
           ),
         ],
-        bottom: isLoggedIn
-            ? TabBar(
-                controller: _tabs,
-                tabs: const [
-                  Tab(text: 'Все'),
-                  Tab(text: 'Непрочитанные'),
-                  Tab(text: 'Прочитанные'),
-                ],
-              )
-            : null,
-      ),
-      body: poemsAsync.when(
-        loading: () => const Center(child: CircularProgressIndicator()),
-        error: (e, _) => _EmptyState(
-          icon: Icons.wifi_off,
-          message: e.toString(),
-          action: FilledButton.icon(
-            onPressed: () => ref.read(poemsProvider.notifier).refresh(),
-            icon: const Icon(Icons.refresh),
-            label: const Text('Повторить'),
-          ),
-        ),
-        data: (_) => isLoggedIn
-            ? TabBarView(
-                controller: _tabs,
-                children: [
-                  _List(poems: filtered, user: user),
-                  _List(
-                      poems: filtered
-                          .where((p) => !user.readPoems.contains(p.title))
-                          .toList(),
-                      user: user),
-                  _List(
-                      poems: filtered
-                          .where((p) => user.readPoems.contains(p.title))
-                          .toList(),
-                      user: user),
-                ],
-              )
-            : _List(poems: filtered, user: null),
       ),
     );
   }
 }
 
-class _List extends ConsumerWidget {
+// ── Header icon button ────────────────────────────────────────────────────────
+
+class _HeaderIcon extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback onTap;
+  const _HeaderIcon({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 44,
+        height: 44,
+        decoration: BoxDecoration(
+          color: cs.surfaceVariant,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: cs.outline, width: 0.8),
+        ),
+        child: Icon(icon, color: cs.onSurface, size: 20),
+      ),
+    );
+  }
+}
+
+// ── Pill tab bar ──────────────────────────────────────────────────────────────
+
+class _PillTabs extends StatelessWidget {
+  final List<String> labels;
+  final int selected;
+  final Color accent;
+  final ValueChanged<int> onSelect;
+  const _PillTabs({
+    required this.labels,
+    required this.selected,
+    required this.accent,
+    required this.onSelect,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      children: List.generate(labels.length, (i) {
+        final active = i == selected;
+        return Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: GestureDetector(
+            onTap: () => onSelect(i),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 200),
+              curve: Curves.easeOut,
+              padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
+              decoration: BoxDecoration(
+                color: active
+                    ? accent.withOpacity(0.18)
+                    : cs.surfaceVariant,
+                borderRadius: BorderRadius.circular(30),
+                border: Border.all(
+                  color: active ? accent.withOpacity(0.6) : cs.outline,
+                  width: active ? 1.2 : 0.8,
+                ),
+              ),
+              child: Text(
+                labels[i],
+                style: GoogleFonts.notoSerif(
+                  color: active ? accent : cs.onSurfaceVariant,
+                  fontSize: 13,
+                  fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+                ),
+              ),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+}
+
+// ── Poem list ─────────────────────────────────────────────────────────────────
+
+class _PoemList extends ConsumerWidget {
   final List<Poem> poems;
   final dynamic user;
-  const _List({required this.poems, required this.user});
+  const _PoemList({required this.poems, required this.user});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     if (poems.isEmpty) {
-      return const _EmptyState(icon: Icons.search_off, message: 'Ничего не найдено');
+      return const _EmptyState(
+        icon: Icons.search_off_rounded,
+        message: 'Ничего не найдено',
+      );
     }
+    final accent = ref.watch(themeProvider).accent;
     return AnimationLimiter(
       child: RefreshIndicator(
+        color: accent,
+        backgroundColor: Theme.of(context).colorScheme.surfaceVariant,
         onRefresh: () => ref.read(poemsProvider.notifier).refresh(),
         child: ListView.builder(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 32),
           itemCount: poems.length,
           itemBuilder: (ctx, i) => AnimationConfiguration.staggeredList(
             position: i,
-            duration: const Duration(milliseconds: 350),
+            duration: const Duration(milliseconds: 320),
             child: SlideAnimation(
-              verticalOffset: 40,
+              verticalOffset: 36,
               child: FadeInAnimation(
                 child: PoemCard(
                   poem: poems[i],
                   isRead: user?.readPoems.contains(poems[i].title) ?? false,
                   isPinned: user?.pinnedPoemTitle == poems[i].title,
                   onTap: () => Navigator.push(
-                      ctx,
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              PoemDetailScreen(poem: poems[i]))),
+                    ctx,
+                    MaterialPageRoute(
+                      builder: (_) => PoemDetailScreen(poem: poems[i]),
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -163,21 +335,35 @@ class _List extends ConsumerWidget {
   }
 }
 
+// ── Empty state ───────────────────────────────────────────────────────────────
+
 class _EmptyState extends StatelessWidget {
   final IconData icon;
   final String message;
   final Widget? action;
-  const _EmptyState({required this.icon, required this.message, this.action});
+  const _EmptyState({
+    required this.icon,
+    required this.message,
+    this.action,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
-          Icon(icon, size: 64, color: Colors.grey),
+          Icon(icon, size: 64, color: cs.onSurfaceVariant.withOpacity(0.4)),
           const SizedBox(height: 16),
-          Text(message, textAlign: TextAlign.center),
+          Text(
+            message,
+            textAlign: TextAlign.center,
+            style: GoogleFonts.notoSerif(
+              color: cs.onSurfaceVariant,
+              fontSize: 14,
+            ),
+          ),
           if (action != null) ...[const SizedBox(height: 16), action!],
         ]),
       ),
