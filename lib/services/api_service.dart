@@ -125,7 +125,7 @@ class ApiService {
   Future<String?> chatWithAI(String prompt) async {
     try {
       final res = await _dio
-          .post('/api/ai/chat', queryParameters: {'prompt': prompt});
+          .post('/api/ai/chat', data: {'prompt': prompt});
       return res.data['response'] as String?;
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) return '__no_access__';
