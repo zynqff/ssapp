@@ -2,7 +2,7 @@ import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 // ⚠️ Замени на реальный URL сервера
-const String kBaseUrl = 'https://ssback-th2z.onrender.com';
+const String kBaseUrl = 'https://ssback-go.onrender.com';
 
 class ApiService {
   static final ApiService _i = ApiService._();
