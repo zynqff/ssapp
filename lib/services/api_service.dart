@@ -12,8 +12,9 @@ class ApiService {
 
   late final Dio _dio = Dio(BaseOptions(
     baseUrl: kBaseUrl,
-    connectTimeout: const Duration(seconds: 10),
-    receiveTimeout: const Duration(seconds: 15),
+    // Render может спать — даём 30 сек на cold start
+    connectTimeout: const Duration(seconds: 30),
+    receiveTimeout: const Duration(seconds: 30),
     headers: {'Content-Type': 'application/json'},
   ))
     ..interceptors.add(InterceptorsWrapper(
@@ -182,10 +183,11 @@ class ApiService {
     }
   }
 
+  // ФИКС: был queryParameters — сервер не получал параметры
   Future<Map<String, dynamic>?> generateAiKey(
       {int expiresInHours = 0, int dailyLimit = 0}) async {
     try {
-      final res = await _dio.post('/api/ai/generate_key', queryParameters: {
+      final res = await _dio.post('/api/ai/generate_key', data: {
         'expires_in_hours': expiresInHours,
         'daily_limit': dailyLimit,
       });
