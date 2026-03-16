@@ -1,6 +1,7 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
+    id("com.google.gms.google-services")  // добавить
     id("dev.flutter.flutter-gradle-plugin")
 }
 
