@@ -11,6 +11,9 @@ final authProvider =
   return AuthNotifier();
 });
 
+// Показывать ли надпись "Подключение к серверу..." (только при первом входе)
+final serverConnectingProvider = StateProvider<bool>((ref) => false);
+
 class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   AuthNotifier() : super(const AsyncValue.loading()) {
     _init();
@@ -26,26 +29,58 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       state = const AsyncValue.data(null);
       return;
     }
-    await _loadUserFromServer();
+
+    final username = await _api.getSavedUsername();
+    if (username == null) {
+      state = const AsyncValue.data(null);
+      return;
+    }
+
+    // Проверяем есть ли локальные данные
+    final hasLocal = await _db.hasPoems();
+
+    if (hasLocal) {
+      // ПОВТОРНЫЙ ВХОД: грузим локально мгновенно, без кружка
+      final readPoems = await _db.getReadPoems(username);
+      final pinned = await _db.getPinnedPoem(username);
+      final isAdmin = await _api.getSavedIsAdmin();
+      state = AsyncValue.data(User(
+        username: username,
+        isAdmin: isAdmin,
+        readPoems: readPoems,
+        pinnedPoemTitle: pinned,
+      ));
+      // Синхронизация тихо в фоне
+      _backgroundSync(username);
+    } else {
+      // ПЕРВЫЙ ВХОД: нет локальных данных, нужен сервер
+      await _loadUserFromServer(username, isFirstTime: true);
+    }
   }
 
-  Future<void> _loadUserFromServer() async {
-    final username = await _api.getSavedUsername();
-    if (username == null) { state = const AsyncValue.data(null); return; }
-
-    // Пробуем загрузить с сервера
+  Future<void> _loadUserFromServer(String username,
+      {bool isFirstTime = false}) async {
     if (await _sync.isOnline()) {
       final me = await _api.fetchMe();
       if (me != null) {
         final user = User.fromJson(me);
         await _db.setReadPoems(username, user.readPoems);
         state = AsyncValue.data(user);
-        _sync.fullSync(username);
+        _backgroundSync(username);
         return;
       }
     }
 
-    // Офлайн — из локальной БД
+    if (isFirstTime) {
+      // Первый вход и нет интернета — показываем ошибку
+      state = AsyncValue.error(
+        'Нет подключения к серверу.\nПроверьте интернет и попробуйте снова.',
+        StackTrace.current,
+      );
+      return;
+    }
+
+    // Повторный вход офлайн — из локальной БД
     final readPoems = await _db.getReadPoems(username);
     final pinned = await _db.getPinnedPoem(username);
     final isAdmin = await _api.getSavedIsAdmin();
@@ -57,6 +92,24 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     ));
   }
 
+  // Фоновая синхронизация — не блокирует UI
+  Future<void> _backgroundSync(String username) async {
+    try {
+      await _sync.fullSync(username);
+      // После синхронизации обновляем данные пользователя тихо
+      final me = await _api.fetchMe();
+      if (me != null && mounted) {
+        final user = User.fromJson(me);
+        await _db.setReadPoems(username, user.readPoems);
+        if (state.value != null) {
+          state = AsyncValue.data(user);
+        }
+      }
+    } catch (_) {
+      // Фоновая ошибка — тихо игнорируем, UI не ломаем
+    }
+  }
+
   Future<String?> login(String username, String password) async {
     state = const AsyncValue.loading();
     final result = await _api.login(username, password);
@@ -64,21 +117,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       state = const AsyncValue.data(null);
       return result.error;
     }
-    await _loadUserFromServer();
+    await _loadUserFromServer(username, isFirstTime: true);
     return null;
   }
 
   Future<String?> loginWithGoogle() async {
-    try {
-      final account = await _googleSignIn.signIn();
-      if (account == null) return 'Вход отменён';
-      // Google OAuth идёт через веб-эндпоинт
-      // Здесь нужен отдельный flow — открываем браузер или используем WebView
-      // Пока что возвращаем заглушку
-      return 'Google OAuth пока доступен только через браузер';
-    } catch (e) {
-      return 'Ошибка Google входа: $e';
-    }
+    // TODO: требует google-services.json с настроенным OAuth client
+    return 'Google вход пока не настроен';
   }
 
   Future<String?> register(String username, String password) async {
