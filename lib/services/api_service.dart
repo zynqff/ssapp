@@ -55,6 +55,24 @@ class ApiService {
     }
   }
 
+
+  Future<({String? error, String username})> loginWithGoogle(
+      String idToken) async {
+    try {
+      final res = await _dio.post('/api/google/mobile-auth',
+          data: {'id_token': idToken});
+      final token = res.data['access_token'] as String;
+      final username = res.data['username'] as String;
+      final isAdmin = res.data['is_admin'] as bool? ?? false;
+      await _storage.write(key: 'access_token', value: token);
+      await _storage.write(key: 'username', value: username);
+      await _storage.write(key: 'is_admin', value: isAdmin.toString());
+      return (error: null, username: username);
+    } on DioException catch (e) {
+      final msg = e.response?.data?['error'] as String? ?? 'Ошибка Google входа';
+      return (error: msg, username: '');
+    }
+  }
   Future<void> logout() async {
     await _storage.deleteAll();
   }
