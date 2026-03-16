@@ -130,8 +130,12 @@ class DatabaseService {
   // ─── Sync queue ───────────────────────────────────────────────────────────
   Future<void> addToSyncQueue(String action, String payload) async {
     final d = await db;
+    // Дедупликация: удаляем старые события с тем же action+payload
+    await d.delete('sync_queue',
+        where: 'action=? AND payload=?', whereArgs: [action, payload]);
     await d.insert('sync_queue', {
-      'action': action, 'payload': payload,
+      'action': action,
+      'payload': payload,
       'created_at': DateTime.now().millisecondsSinceEpoch,
     });
   }
