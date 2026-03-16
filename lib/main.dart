@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/poems_provider.dart';
 import 'screens/poems_screen.dart';
 import 'screens/login_screen.dart';
 
@@ -37,7 +38,6 @@ class _App extends ConsumerWidget {
   ThemeData _buildTheme(Brightness brightness, Color accent) {
     final isDark = brightness == Brightness.dark;
 
-    // Derive palette from accent
     final bgColor      = isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF4F2F8);
     final surfaceColor = isDark ? const Color(0xFF252538) : const Color(0xFFFFFFFF);
     final surfaceVar   = isDark ? const Color(0xFF2E2E45) : const Color(0xFFEDE9F4);
@@ -152,11 +152,127 @@ class _Root extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final auth = ref.watch(authProvider);
     return auth.when(
-      loading: () =>
-          const Scaffold(body: Center(child: CircularProgressIndicator())),
-      error: (_, __) => const PoemsScreen(),
+      // Показываем loading только при реально первом входе (нет локальных данных)
+      loading: () => const _ConnectingScreen(),
+      error: (e, _) => _ServerErrorScreen(message: e.toString()),
       data: (user) =>
           user != null ? const PoemsScreen() : const LoginScreen(),
+    );
+  }
+}
+
+// Экран "Подключение к серверу..." — показывается только при первом входе
+class _ConnectingScreen extends ConsumerWidget {
+  const _ConnectingScreen();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 72,
+              height: 72,
+              decoration: BoxDecoration(
+                color: cs.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: cs.primary.withOpacity(0.3),
+                  width: 1.2,
+                ),
+              ),
+              child: Icon(Icons.menu_book_outlined, size: 34, color: cs.primary),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: cs.primary,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Подключение к серверу...',
+              style: GoogleFonts.notoSerif(
+                color: cs.onSurfaceVariant,
+                fontSize: 14,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              'Первый запуск может занять до 30 секунд',
+              style: GoogleFonts.notoSerif(
+                color: cs.onSurfaceVariant.withOpacity(0.6),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// Экран ошибки подключения — с кнопкой повтора
+class _ServerErrorScreen extends ConsumerWidget {
+  final String message;
+  const _ServerErrorScreen({required this.message});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.wifi_off_rounded, size: 56, color: cs.onSurfaceVariant.withOpacity(0.4)),
+              const SizedBox(height: 20),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSerif(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 14,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 24),
+              FilledButton.icon(
+                onPressed: () {
+                  // Переинициализируем провайдер
+                  ref.invalidate(authProvider);
+                  ref.invalidate(poemsProvider);
+                },
+                icon: const Icon(Icons.refresh_rounded),
+                label: Text(
+                  'Повторить',
+                  style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: () {
+                  // Открыть экран входа без сервера — нельзя, но можно посмотреть стихи офлайн
+                  // если уже были данные (этот экран не покажется в таком случае)
+                },
+                child: Text(
+                  'Попробовать позже',
+                  style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
