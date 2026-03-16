@@ -11,9 +11,6 @@ final authProvider =
   return AuthNotifier();
 });
 
-// Показывать ли надпись "Подключение к серверу..." (только при первом входе)
-final serverConnectingProvider = StateProvider<bool>((ref) => false);
-
 class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   AuthNotifier() : super(const AsyncValue.loading()) {
     _init();
@@ -22,7 +19,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final _api = ApiService();
   final _db = DatabaseService();
   final _sync = SyncService();
-  final _googleSignIn = GoogleSignIn(scopes: ['email']);
+
+  // serverClientId = Web client ID из Google Console
+  // нужен чтобы idToken имел правильный aud для бэкенда
+  final _googleSignIn = GoogleSignIn(
+    scopes: ['email'],
+    serverClientId:
+        '72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com',
+  );
 
   Future<void> _init() async {
     if (!await _api.hasToken()) {
@@ -36,11 +40,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       return;
     }
 
-    // Проверяем есть ли локальные данные
     final hasLocal = await _db.hasPoems();
 
     if (hasLocal) {
-      // ПОВТОРНЫЙ ВХОД: грузим локально мгновенно, без кружка
+      // ПОВТОРНЫЙ ВХОД: мгновенно из локальной БД
       final readPoems = await _db.getReadPoems(username);
       final pinned = await _db.getPinnedPoem(username);
       final isAdmin = await _api.getSavedIsAdmin();
@@ -50,10 +53,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         readPoems: readPoems,
         pinnedPoemTitle: pinned,
       ));
-      // Синхронизация тихо в фоне
       _backgroundSync(username);
     } else {
-      // ПЕРВЫЙ ВХОД: нет локальных данных, нужен сервер
+      // ПЕРВЫЙ ВХОД: нужен сервер
       await _loadUserFromServer(username, isFirstTime: true);
     }
   }
@@ -72,7 +74,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
 
     if (isFirstTime) {
-      // Первый вход и нет интернета — показываем ошибку
       state = AsyncValue.error(
         'Нет подключения к серверу.\nПроверьте интернет и попробуйте снова.',
         StackTrace.current,
@@ -80,7 +81,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       return;
     }
 
-    // Повторный вход офлайн — из локальной БД
     final readPoems = await _db.getReadPoems(username);
     final pinned = await _db.getPinnedPoem(username);
     final isAdmin = await _api.getSavedIsAdmin();
@@ -92,11 +92,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     ));
   }
 
-  // Фоновая синхронизация — не блокирует UI
   Future<void> _backgroundSync(String username) async {
     try {
       await _sync.fullSync(username);
-      // После синхронизации обновляем данные пользователя тихо
       final me = await _api.fetchMe();
       if (me != null && mounted) {
         final user = User.fromJson(me);
@@ -105,9 +103,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           state = AsyncValue.data(user);
         }
       }
-    } catch (_) {
-      // Фоновая ошибка — тихо игнорируем, UI не ломаем
-    }
+    } catch (_) {}
   }
 
   Future<String?> login(String username, String password) async {
@@ -122,8 +118,26 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   Future<String?> loginWithGoogle() async {
-    // TODO: требует google-services.json с настроенным OAuth client
-    return 'Google вход пока не настроен';
+    try {
+      // 1. Открываем окно выбора аккаунта Google
+      final account = await _googleSignIn.signIn();
+      if (account == null) return 'Вход отменён';
+
+      // 2. Получаем idToken
+      final auth = await account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null) return 'Не удалось получить токен Google';
+
+      // 3. Отправляем idToken на бэкенд
+      final result = await _api.loginWithGoogle(idToken);
+      if (result.error != null) return result.error;
+
+      // 4. Грузим данные пользователя
+      await _loadUserFromServer(result.username, isFirstTime: true);
+      return null;
+    } catch (e) {
+      return 'Ошибка Google входа: $e';
+    }
   }
 
   Future<String?> register(String username, String password) async {
