@@ -1,10 +1,12 @@
 class Poem {
+  final int id;
   final String title;
   final String author;
   final String text;
   final int lineCount;
 
   const Poem({
+    required this.id,
     required this.title,
     required this.author,
     required this.text,
@@ -12,6 +14,7 @@ class Poem {
   });
 
   factory Poem.fromJson(Map<String, dynamic> json) => Poem(
+        id: (json['id'] as num).toInt(),
         title: json['title'] as String,
         author: json['author'] as String,
         text: json['text'] as String,
@@ -20,6 +23,7 @@ class Poem {
       );
 
   factory Poem.fromDb(Map<String, dynamic> row) => Poem(
+        id: row['id'] as int,
         title: row['title'] as String,
         author: row['author'] as String,
         text: row['text'] as String,
@@ -27,6 +31,7 @@ class Poem {
       );
 
   Map<String, dynamic> toDb() => {
+        'id': id,
         'title': title,
         'author': author,
         'text': text,
@@ -34,6 +39,7 @@ class Poem {
       };
 
   Map<String, dynamic> toJson() => {
+        'id': id,
         'title': title,
         'author': author,
         'text': text,
@@ -41,6 +47,7 @@ class Poem {
       };
 
   Poem copyWith({String? title, String? author, String? text}) => Poem(
+        id: id,
         title: title ?? this.title,
         author: author ?? this.author,
         text: text ?? this.text,
