@@ -181,7 +181,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     _Divider(),
                     _Stat(label: 'Прогресс', value: '$pct%'),
                   ]),
-                  if (user.pinnedPoemTitle != null) ...[
+                  if (user.pinnedPoemId != null) ...[
                     Padding(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       child: Divider(color: cs.outline.withOpacity(0.4), height: 1),
@@ -190,7 +190,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Icon(Icons.push_pin_rounded, size: 13, color: cs.tertiary),
                       const SizedBox(width: 6),
                       Expanded(child: Text(
-                        'Закреплено: ${user.pinnedPoemTitle}',
+                        'Закреплено: ${poems.where((p) => p.id == user.pinnedPoemId).firstOrNull?.title ?? "#${user.pinnedPoemId}"}',
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.notoSerif(
                             color: cs.onSurfaceVariant, fontSize: 12.5),
