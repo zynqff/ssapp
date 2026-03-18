@@ -1,8 +1,8 @@
 class User {
   final String username;
   final bool isAdmin;
-  final List<String> readPoems;
-  final String? pinnedPoemTitle;
+  final List<int> readPoems;
+  final int? pinnedPoemId;
   final bool showAllTab;
   final String userData;
 
@@ -10,14 +10,14 @@ class User {
     required this.username,
     this.isAdmin = false,
     this.readPoems = const [],
-    this.pinnedPoemTitle,
+    this.pinnedPoemId,
     this.showAllTab = false,
     this.userData = '',
   });
 
   User copyWith({
-    List<String>? readPoems,
-    String? pinnedPoemTitle,
+    List<int>? readPoems,
+    int? pinnedPoemId,
     bool clearPinned = false,
     bool? showAllTab,
     String? userData,
@@ -26,8 +26,7 @@ class User {
         username: username,
         isAdmin: isAdmin,
         readPoems: readPoems ?? this.readPoems,
-        pinnedPoemTitle:
-            clearPinned ? null : (pinnedPoemTitle ?? this.pinnedPoemTitle),
+        pinnedPoemId: clearPinned ? null : (pinnedPoemId ?? this.pinnedPoemId),
         showAllTab: showAllTab ?? this.showAllTab,
         userData: userData ?? this.userData,
       );
@@ -35,8 +34,10 @@ class User {
   factory User.fromJson(Map<String, dynamic> json) => User(
         username: json['username'] as String,
         isAdmin: json['is_admin'] as bool? ?? false,
-        readPoems: List<String>.from(json['read_poems'] as List? ?? []),
-        pinnedPoemTitle: json['pinned_poem_title'] as String?,
+        readPoems: (json['read_poems'] as List? ?? [])
+            .map((e) => (e as num).toInt())
+            .toList(),
+        pinnedPoemId: (json['pinned_poem_id'] as num?)?.toInt(),
         showAllTab: json['show_all_tab'] as bool? ?? false,
         userData: json['user_data'] as String? ?? '',
       );
