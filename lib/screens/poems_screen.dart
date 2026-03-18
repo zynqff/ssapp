@@ -184,13 +184,13 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
                         _PoemList(poems: filtered, user: user),
                         _PoemList(
                           poems: filtered
-                              .where((p) => !user.readPoems.contains(p.title))
+                              .where((p) => !user.readPoems.contains(p.id))
                               .toList(),
                           user: user,
                         ),
                         _PoemList(
                           poems: filtered
-                              .where((p) => user.readPoems.contains(p.title))
+                              .where((p) => user.readPoems.contains(p.id))
                               .toList(),
                           user: user,
                         ),
@@ -317,8 +317,8 @@ class _PoemList extends ConsumerWidget {
               child: FadeInAnimation(
                 child: PoemCard(
                   poem: poems[i],
-                  isRead: user?.readPoems.contains(poems[i].title) ?? false,
-                  isPinned: user?.pinnedPoemTitle == poems[i].title,
+                  isRead: user?.readPoems.contains(poems[i].id) ?? false,
+                  isPinned: user?.pinnedPoemId == poems[i].id,
                   onTap: () => Navigator.push(
                     ctx,
                     MaterialPageRoute(
