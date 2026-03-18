@@ -20,8 +20,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final _db = DatabaseService();
   final _sync = SyncService();
 
-  // serverClientId = Web client ID из Google Console
-  // нужен чтобы idToken имел правильный aud для бэкенда
   final _googleSignIn = GoogleSignIn(
     scopes: ['email'],
     serverClientId:
@@ -43,7 +41,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     final hasLocal = await _db.hasPoems();
 
     if (hasLocal) {
-      // ПОВТОРНЫЙ ВХОД: мгновенно из локальной БД
       final readPoems = await _db.getReadPoems(username);
       final pinned = await _db.getPinnedPoem(username);
       final isAdmin = await _api.getSavedIsAdmin();
@@ -51,11 +48,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         username: username,
         isAdmin: isAdmin,
         readPoems: readPoems,
-        pinnedPoemTitle: pinned,
+        pinnedPoemId: pinned,
       ));
       _backgroundSync(username);
     } else {
-      // ПЕРВЫЙ ВХОД: нужен сервер
       await _loadUserFromServer(username, isFirstTime: true);
     }
   }
@@ -88,7 +84,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       username: username,
       isAdmin: isAdmin,
       readPoems: readPoems,
-      pinnedPoemTitle: pinned,
+      pinnedPoemId: pinned,
     ));
   }
 
@@ -119,20 +115,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   Future<String?> loginWithGoogle() async {
     try {
-      // 1. Открываем окно выбора аккаунта Google
       final account = await _googleSignIn.signIn();
       if (account == null) return 'Вход отменён';
-
-      // 2. Получаем idToken
       final auth = await account.authentication;
       final idToken = auth.idToken;
       if (idToken == null) return 'Не удалось получить токен Google';
-
-      // 3. Отправляем idToken на бэкенд
       final result = await _api.loginWithGoogle(idToken);
       if (result.error != null) return result.error;
-
-      // 4. Грузим данные пользователя
       await _loadUserFromServer(result.username, isFirstTime: true);
       return null;
     } catch (e) {
@@ -153,35 +142,35 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     state = const AsyncValue.data(null);
   }
 
-  Future<void> toggleRead(String title) async {
+  Future<void> toggleRead(int poemId) async {
     final user = state.value;
     if (user == null) return;
-    final action = await _db.toggleReadPoem(user.username, title);
-    final newList = List<String>.from(user.readPoems);
-    action == 'marked' ? newList.add(title) : newList.remove(title);
+    final action = await _db.toggleReadPoem(user.username, poemId);
+    final newList = List<int>.from(user.readPoems);
+    action == 'marked' ? newList.add(poemId) : newList.remove(poemId);
     state = AsyncValue.data(user.copyWith(readPoems: newList));
 
     if (await _sync.isOnline()) {
-      await _api.toggleRead(title);
+      await _api.toggleRead(poemId);
     } else {
-      await _db.addToSyncQueue('toggle_read', jsonEncode({'title': title}));
+      await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
     }
   }
 
-  Future<void> togglePin(String title) async {
+  Future<void> togglePin(int poemId) async {
     final user = state.value;
     if (user == null) return;
-    final action = await _db.togglePinnedPoem(user.username, title);
-    final newPinned = action == 'pinned' ? title : null;
+    final action = await _db.togglePinnedPoem(user.username, poemId);
+    final newPinned = action == 'pinned' ? poemId : null;
     state = AsyncValue.data(user.copyWith(
-      pinnedPoemTitle: newPinned,
+      pinnedPoemId: newPinned,
       clearPinned: newPinned == null,
     ));
 
     if (await _sync.isOnline()) {
-      await _api.togglePin(title);
+      await _api.togglePin(poemId);
     } else {
-      await _db.addToSyncQueue('toggle_pin', jsonEncode({'title': title}));
+      await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
     }
   }
 
