@@ -12,8 +12,8 @@ class PoemDetailScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final user = ref.watch(authProvider).value;
-    final isRead = user?.readPoems.contains(poem.title) ?? false;
-    final isPinned = user?.pinnedPoemTitle == poem.title;
+    final isRead = user?.readPoems.contains(poem.id) ?? false;
+    final isPinned = user?.pinnedPoemId == poem.id;
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -66,7 +66,7 @@ class PoemDetailScreen extends ConsumerWidget {
                   : Icons.push_pin_outlined,
               active: isPinned,
               onTap: () =>
-                  ref.read(authProvider.notifier).togglePin(poem.title),
+                  ref.read(authProvider.notifier).togglePin(poem.id),
             ),
             const SizedBox(width: 4),
             _AppBarAction(
@@ -75,7 +75,7 @@ class PoemDetailScreen extends ConsumerWidget {
                   : Icons.check_circle_outline_rounded,
               active: isRead,
               onTap: () =>
-                  ref.read(authProvider.notifier).toggleRead(poem.title),
+                  ref.read(authProvider.notifier).toggleRead(poem.id),
             ),
           ],
           const SizedBox(width: 8),
