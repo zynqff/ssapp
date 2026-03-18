@@ -13,24 +13,42 @@ class DatabaseService {
 
   Future<Database> _init() async {
     final path = join(await getDatabasesPath(), 'sscollective.db');
-    return openDatabase(path, version: 1, onCreate: _onCreate);
+    return openDatabase(path, version: 2, onCreate: _onCreate, onUpgrade: _onUpgrade);
   }
 
   Future<void> _onCreate(Database db, int v) async {
     await db.execute('''CREATE TABLE poems(
-      title TEXT PRIMARY KEY, author TEXT NOT NULL,
+      id INTEGER PRIMARY KEY, title TEXT NOT NULL, author TEXT NOT NULL,
       text TEXT NOT NULL, line_count INTEGER NOT NULL DEFAULT 0)''');
     await db.execute('''CREATE TABLE read_poems(
-      username TEXT NOT NULL, poem_title TEXT NOT NULL,
-      PRIMARY KEY(username, poem_title))''');
+      username TEXT NOT NULL, poem_id INTEGER NOT NULL,
+      PRIMARY KEY(username, poem_id))''');
     await db.execute('''CREATE TABLE pinned_poem(
-      username TEXT PRIMARY KEY, poem_title TEXT)''');
+      username TEXT PRIMARY KEY, poem_id INTEGER)''');
     await db.execute('''CREATE TABLE chat_history(
       id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL,
       role TEXT NOT NULL, content TEXT NOT NULL, created_at INTEGER NOT NULL)''');
     await db.execute('''CREATE TABLE sync_queue(
       id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT NOT NULL,
       payload TEXT NOT NULL, created_at INTEGER NOT NULL)''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldV, int newV) async {
+    if (oldV < 2) {
+      // Миграция: пересоздаём таблицы с id вместо title
+      await db.execute('DROP TABLE IF EXISTS read_poems');
+      await db.execute('DROP TABLE IF EXISTS pinned_poem');
+      await db.execute('''CREATE TABLE read_poems(
+        username TEXT NOT NULL, poem_id INTEGER NOT NULL,
+        PRIMARY KEY(username, poem_id))''');
+      await db.execute('''CREATE TABLE pinned_poem(
+        username TEXT PRIMARY KEY, poem_id INTEGER)''');
+      // poems тоже пересоздаём чтобы добавить id как PRIMARY KEY
+      await db.execute('DROP TABLE IF EXISTS poems');
+      await db.execute('''CREATE TABLE poems(
+        id INTEGER PRIMARY KEY, title TEXT NOT NULL, author TEXT NOT NULL,
+        text TEXT NOT NULL, line_count INTEGER NOT NULL DEFAULT 0)''');
+    }
   }
 
   // ─── Poems ────────────────────────────────────────────────────────────────
@@ -55,55 +73,55 @@ class DatabaseService {
   }
 
   // ─── Read poems ───────────────────────────────────────────────────────────
-  Future<List<String>> getReadPoems(String username) async {
+  Future<List<int>> getReadPoems(String username) async {
     final d = await db;
     final rows = await d.query('read_poems',
-        columns: ['poem_title'], where: 'username=?', whereArgs: [username]);
-    return rows.map((r) => r['poem_title'] as String).toList();
+        columns: ['poem_id'], where: 'username=?', whereArgs: [username]);
+    return rows.map((r) => r['poem_id'] as int).toList();
   }
 
-  Future<void> setReadPoems(String username, List<String> titles) async {
+  Future<void> setReadPoems(String username, List<int> ids) async {
     final d = await db;
     await d.delete('read_poems', where: 'username=?', whereArgs: [username]);
     final b = d.batch();
-    for (final t in titles) {
-      b.insert('read_poems', {'username': username, 'poem_title': t},
+    for (final id in ids) {
+      b.insert('read_poems', {'username': username, 'poem_id': id},
           conflictAlgorithm: ConflictAlgorithm.replace);
     }
     await b.commit(noResult: true);
   }
 
-  Future<String> toggleReadPoem(String username, String title) async {
+  Future<String> toggleReadPoem(String username, int poemId) async {
     final d = await db;
     final ex = await d.query('read_poems',
-        where: 'username=? AND poem_title=?', whereArgs: [username, title]);
+        where: 'username=? AND poem_id=?', whereArgs: [username, poemId]);
     if (ex.isNotEmpty) {
       await d.delete('read_poems',
-          where: 'username=? AND poem_title=?', whereArgs: [username, title]);
+          where: 'username=? AND poem_id=?', whereArgs: [username, poemId]);
       return 'unmarked';
     }
-    await d.insert('read_poems', {'username': username, 'poem_title': title},
+    await d.insert('read_poems', {'username': username, 'poem_id': poemId},
         conflictAlgorithm: ConflictAlgorithm.replace);
     return 'marked';
   }
 
   // ─── Pinned ───────────────────────────────────────────────────────────────
-  Future<String?> getPinnedPoem(String username) async {
+  Future<int?> getPinnedPoem(String username) async {
     final d = await db;
     final rows = await d.query('pinned_poem',
         where: 'username=?', whereArgs: [username]);
     if (rows.isEmpty) return null;
-    return rows.first['poem_title'] as String?;
+    return rows.first['poem_id'] as int?;
   }
 
-  Future<String> togglePinnedPoem(String username, String title) async {
+  Future<String> togglePinnedPoem(String username, int poemId) async {
     final d = await db;
     final current = await getPinnedPoem(username);
-    if (current == title) {
+    if (current == poemId) {
       await d.delete('pinned_poem', where: 'username=?', whereArgs: [username]);
       return 'unpinned';
     }
-    await d.insert('pinned_poem', {'username': username, 'poem_title': title},
+    await d.insert('pinned_poem', {'username': username, 'poem_id': poemId},
         conflictAlgorithm: ConflictAlgorithm.replace);
     return 'pinned';
   }
@@ -130,7 +148,6 @@ class DatabaseService {
   // ─── Sync queue ───────────────────────────────────────────────────────────
   Future<void> addToSyncQueue(String action, String payload) async {
     final d = await db;
-    // Дедупликация: удаляем старые события с тем же action+payload
     await d.delete('sync_queue',
         where: 'action=? AND payload=?', whereArgs: [action, payload]);
     await d.insert('sync_queue', {
