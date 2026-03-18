@@ -120,20 +120,20 @@ class ApiService {
     }
   }
 
-  Future<bool> toggleRead(String title) async {
+  Future<bool> toggleRead(int poemId) async {
     try {
       final res =
-          await _dio.post('/api/toggle_read', data: {'title': title});
+          await _dio.post('/api/toggle_read', data: {'poem_id': poemId});
       return res.data['success'] == true;
     } catch (_) {
       return false;
     }
   }
 
-  Future<Map<String, dynamic>?> togglePin(String title) async {
+  Future<Map<String, dynamic>?> togglePin(int poemId) async {
     try {
       final res =
-          await _dio.post('/api/toggle_pin', data: {'title': title});
+          await _dio.post('/api/toggle_pin', data: {'poem_id': poemId});
       return res.data as Map<String, dynamic>;
     } catch (_) {
       return null;
