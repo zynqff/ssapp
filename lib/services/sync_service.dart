@@ -42,9 +42,9 @@ class SyncService {
       try {
         switch (action) {
           case 'toggle_read':
-            ok = await _api.toggleRead(payload['title'] as String);
+            ok = await _api.toggleRead((payload['poem_id'] as num).toInt());
           case 'toggle_pin':
-            final r = await _api.togglePin(payload['title'] as String);
+            final r = await _api.togglePin((payload['poem_id'] as num).toInt());
             ok = r != null;
           case 'update_profile':
             ok = await _api.updateProfile(
