@@ -53,22 +53,11 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
-      # Собираем сплит APK (для прямой установки)
-      - name: Build APK
+      # Собираем APK (сплиты) и AAB одной командой через Gradle
+      - name: Build APK + AAB
         run: |
           cd android
-          ./gradlew assembleRelease
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
-          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      # Собираем AAB (для Рустора и Google Play)
-      - name: Build AAB
-        run: |
-          flutter build appbundle --release \
-            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          ./gradlew assembleRelease bundleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -83,7 +72,7 @@ jobs:
             ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
             ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
             ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
-            ${{ github.workspace }}/build/app/outputs/bundle/release/app-release.aab
+            ${{ github.workspace }}/android/app/build/outputs/bundle/release/app-release.aab
           name: SSApp ${{ github.ref_name }}
           body: |
             ### Для установки (APK)
