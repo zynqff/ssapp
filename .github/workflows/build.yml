@@ -26,6 +26,12 @@ jobs:
         with:
           flutter-version: '3.41.4'
 
+      # Записываем google-services.json из секрета — в коде его нет
+      - name: Write google-services.json
+        run: |
+          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' \
+            > android/app/google-services.json
+
       - name: Get dependencies
         run: flutter pub get
 
@@ -36,12 +42,13 @@ jobs:
 
       - name: Decode keystore
         run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
+            > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK
         run: |
-          cd android
-          ./gradlew assembleRelease
+          flutter build apk --release \
+            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -51,7 +58,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ github.workspace }}/android/app/build/outputs/apk/release/app-release.apk
+          files: build/app/outputs/flutter-apk/app-release.apk
           name: SSApp ${{ github.ref_name }}
           body: |
             - Added Russian language (Initial translation. May be rough)
