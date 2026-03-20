@@ -44,21 +44,25 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
+      # Собираем через Gradle напрямую — как было в оригинальном build.yml
       - name: Build APK
         run: |
-          flutter build apk --release \
-            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-            --android-skip-build-dependency-validation
+          cd android
+          ./gradlew assembleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      # Ищем APK где бы он ни был
+      - name: Find APK
+        run: find ${{ github.workspace }} -name "*.apk" 2>/dev/null
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ github.workspace }}/build/app/outputs/flutter-apk/app-release.apk
+          files: ${{ github.workspace }}/android/app/build/outputs/apk/release/app-release.apk
           name: SSApp ${{ github.ref_name }}
           body: |
             - Added Russian language (Initial translation. May be rough)
