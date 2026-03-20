@@ -44,7 +44,6 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
-      # Собираем через Gradle напрямую — как было в оригинальном build.yml
       - name: Build APK
         run: |
           cd android
@@ -54,10 +53,6 @@ jobs:
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      # Ищем APK где бы он ни был
-      - name: Find APK
-        run: find ${{ github.workspace }} -name "*.apk" 2>/dev/null
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
