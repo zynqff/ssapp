@@ -1,7 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String kBaseUrl = 'https://ssback-go.onrender.com';
+const String kBaseUrl = String.fromEnvironment(
+  'BASE_URL',
+  defaultValue: 'https://ssback-go.onrender.com',
+);
 
 class ApiService {
   static final ApiService _i = ApiService._();
@@ -55,7 +58,6 @@ class ApiService {
     }
   }
 
-
   Future<({String? error, String username})> loginWithGoogle(
       String idToken) async {
     try {
@@ -73,7 +75,11 @@ class ApiService {
       return (error: msg, username: '');
     }
   }
+
   Future<void> logout() async {
+    try {
+      await _dio.post('/api/logout'); // исправлено: было .get
+    } catch (_) {}
     await _storage.deleteAll();
   }
 
@@ -143,8 +149,7 @@ class ApiService {
   // ─── AI ───────────────────────────────────────────────────────────────────
   Future<String?> chatWithAI(String prompt) async {
     try {
-      final res = await _dio
-          .post('/api/ai/chat', data: {'prompt': prompt});
+      final res = await _dio.post('/api/ai/chat', data: {'prompt': prompt});
       return res.data['response'] as String?;
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) return '__no_access__';
@@ -201,7 +206,6 @@ class ApiService {
     }
   }
 
-  // ФИКС: был queryParameters — сервер не получал параметры
   Future<Map<String, dynamic>?> generateAiKey(
       {int expiresInHours = 0, int dailyLimit = 0}) async {
     try {
