@@ -1,4 +1,4 @@
-name: Build APK
+name: Build APK & AAB
 
 on:
   push:
@@ -34,7 +34,6 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
-      # Удаляем старые иконки и генерируем правильные из assets/icon/icon.png
       - name: Generate launcher icons
         run: |
           rm -rf android/app/src/main/res/mipmap-hdpi
@@ -54,10 +53,22 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
+      # Собираем сплит APK (для прямой установки)
       - name: Build APK
         run: |
           cd android
           ./gradlew assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      # Собираем AAB (для Рустора и Google Play)
+      - name: Build AAB
+        run: |
+          flutter build appbundle --release \
+            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -72,12 +83,16 @@ jobs:
             ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
             ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
             ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
+            ${{ github.workspace }}/build/app/outputs/bundle/release/app-release.aab
           name: SSApp ${{ github.ref_name }}
           body: |
-            ### Скачать APK
+            ### Для установки (APK)
             - **arm64-v8a** — все современные устройства (2017+), выбирай этот если не знаешь какой
             - **armeabi-v7a** — старые 32-bit устройства
             - **x86_64** — эмуляторы и Chromebook
             - **universal** — работает на всех, но весит больше
+
+            ### Для магазинов (AAB)
+            - **app-release.aab** — загружать в Рустор / Google Play
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
