@@ -22,8 +22,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   final _googleSignIn = GoogleSignIn(
     scopes: ['email'],
-    serverClientId:
-        '72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com',
+    // Передаётся через --dart-define=GOOGLE_CLIENT_ID=... при сборке
+    serverClientId: const String.fromEnvironment('GOOGLE_CLIENT_ID'),
   );
 
   Future<void> _init() async {
@@ -130,7 +130,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   Future<String?> register(String username, String password) async {
-    if (password.length < 4) return 'Пароль не менее 4 символов';
+    if (password.length < 8) return 'Пароль не менее 8 символов';
     return _api.register(username, password);
   }
 
