@@ -34,6 +34,16 @@ jobs:
       - name: Get dependencies
         run: flutter pub get
 
+      # Удаляем старые иконки и генерируем правильные из assets/icon/icon.png
+      - name: Generate launcher icons
+        run: |
+          rm -rf android/app/src/main/res/mipmap-hdpi
+          rm -rf android/app/src/main/res/mipmap-mdpi
+          rm -rf android/app/src/main/res/mipmap-xhdpi
+          rm -rf android/app/src/main/res/mipmap-xxhdpi
+          rm -rf android/app/src/main/res/mipmap-xxxhdpi
+          dart run flutter_launcher_icons
+
       - name: Create gradlew
         run: |
           ls android/gradlew 2>/dev/null || (cd android && gradle wrapper --gradle-version 8.6)
@@ -57,11 +67,17 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ github.workspace }}/android/app/build/outputs/apk/release/app-release.apk
+          files: |
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
           name: SSApp ${{ github.ref_name }}
           body: |
-            - Added Russian language (Initial translation. May be rough)
-            - Full Russification
-            - If you have any corrections or want to help with the translation into Russian and other languages, contact: zynqff@gmail.com
+            ### Скачать APK
+            - **arm64-v8a** — все современные устройства (2017+), выбирай этот если не знаешь какой
+            - **armeabi-v7a** — старые 32-bit устройства
+            - **x86_64** — эмуляторы и Chromebook
+            - **universal** — работает на всех, но весит больше
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
