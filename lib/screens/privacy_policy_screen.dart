@@ -93,11 +93,11 @@ class PrivacyPolicyScreen extends StatelessWidget {
             ),
             _PolicySection(
               title: 'Контакт',
-              body: 'По вопросам конфиденциальности: [email@example.com]',
+              body: 'По вопросам конфиденциальности: zynqff@gmail.com',
             ),
             const SizedBox(height: 8),
             Text(
-              'Версия: 1.0 · Вступает в силу: [дата публикации]',
+              'Версия: 1.0 · Вступает в силу: 21.03.2026',
               style: GoogleFonts.notoSerif(
                 color: cs.onSurfaceVariant,
                 fontSize: 11,
