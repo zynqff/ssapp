@@ -1,7 +1,7 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    id("com.google.gms.google-services")  // добавить
+    id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
@@ -27,14 +27,12 @@ android {
         versionName = flutter.versionName
     }
 
-    // --- БЛОК ПОДПИСИ ПРИЛОЖЕНИЯ ---
+    // --- ПОДПИСЬ ---
     signingConfigs {
         create("release") {
-            // Эти переменные подтянутся из твоего YAML-скрипта на GitHub
             keyAlias = System.getenv("KEY_ALIAS")
             keyPassword = System.getenv("KEY_PASSWORD")
             storePassword = System.getenv("KEYSTORE_PASSWORD")
-            
             val ksPath = System.getenv("KEYSTORE_PATH")
             if (!ksPath.isNullOrEmpty()) {
                 storeFile = file(ksPath)
@@ -44,10 +42,7 @@ android {
 
     buildTypes {
         release {
-            // Используем созданную выше конфигурацию "release"
             signingConfig = signingConfigs.getByName("release")
-            
-            // Оптимизация и сжатие кода (рекомендуется для релизных APK)
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -55,9 +50,18 @@ android {
                 "proguard-rules.pro"
             )
         }
-        
         debug {
             signingConfig = signingConfigs.getByName("debug")
+        }
+    }
+
+    // --- СПЛИТ APK ПО АРХИТЕКТУРЕ ---
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true // универсальный APK тоже собираем
         }
     }
 }
