@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/poems_provider.dart';
@@ -12,8 +13,14 @@ import 'screens/login_screen.dart';
 
 const String kAppVersion = '1.0.2';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  await Supabase.initialize(
+    url: const String.fromEnvironment('SUPABASE_URL'),
+    anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
+  );
+
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -420,19 +427,11 @@ class _ConnectingScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
             Text(
-              'Подключение к серверу...',
+              'Подключение...',
               style: GoogleFonts.notoSerif(
                 color: cs.onSurfaceVariant,
                 fontSize: 14,
                 fontStyle: FontStyle.italic,
-              ),
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'Первый запуск может занять до 30 секунд',
-              style: GoogleFonts.notoSerif(
-                color: cs.onSurfaceVariant.withOpacity(0.6),
-                fontSize: 12,
               ),
             ),
           ],
