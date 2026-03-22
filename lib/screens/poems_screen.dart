@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../providers/poems_provider.dart';
 import '../providers/auth_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/config_provider.dart';
 import '../models/poem.dart';
 import '../widgets/poem_card.dart';
 import 'poem_detail_screen.dart';
@@ -50,6 +51,7 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
     final isLoggedIn = user != null;
     final accent = ref.watch(themeProvider).accent;
     final bg = Theme.of(context).scaffoldBackgroundColor;
+    final config = ref.watch(configProvider).valueOrNull;
 
     return Scaffold(
       body: Column(
@@ -162,6 +164,10 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
             ),
           ),
 
+          // ── Баннер из app_config ───────────────────────────────────────
+          if (config != null && config.bannerText.isNotEmpty)
+            _AppBanner(text: config.bannerText, color: config.bannerColor),
+
           // ── Body ──────────────────────────────────────────────────────
           Expanded(
             child: poemsAsync.when(
@@ -201,6 +207,45 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
           ),
         ],
       ),
+    );
+  }
+}
+
+// ── App banner ────────────────────────────────────────────────────────────────
+
+class _AppBanner extends StatelessWidget {
+  final String text;
+  final String color;
+  const _AppBanner({required this.text, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final bannerColor = switch (color) {
+      'error'   => cs.error,
+      'warning' => const Color(0xFFE6A817),
+      _         => cs.primary, // info
+    };
+    final icon = switch (color) {
+      'error'   => Icons.error_outline_rounded,
+      'warning' => Icons.warning_amber_rounded,
+      _         => Icons.info_outline_rounded,
+    };
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      color: bannerColor.withOpacity(0.1),
+      child: Row(children: [
+        Icon(icon, size: 16, color: bannerColor),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            text,
+            style: GoogleFonts.notoSerif(
+                color: bannerColor, fontSize: 12.5),
+          ),
+        ),
+      ]),
     );
   }
 }
