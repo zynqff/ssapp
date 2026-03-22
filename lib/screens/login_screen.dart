@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
+import '../providers/config_provider.dart';
 import 'privacy_policy_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -62,7 +63,16 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final config = ref.watch(configProvider).valueOrNull;
+    final googleEnabled = config?.googleSigninEnabled ?? true;
+    final registrationEnabled = config?.registrationEnabled ?? true;
+
+    // Если регистрация отключена и пользователь на вкладке регистрации — переключаем
+    if (_isRegister && !registrationEnabled) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) setState(() => _isRegister = false);
+      });
+    }
 
     return Scaffold(
       body: SafeArea(
@@ -190,53 +200,55 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Divider
-                Row(children: [
-                  Expanded(
-                      child: Divider(color: cs.outline.withOpacity(0.5))),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 14),
-                    child: Text('или',
+                // Google button — скрывается если google_signin_enabled = false
+                if (googleEnabled) ...[
+                  Row(children: [
+                    Expanded(
+                        child: Divider(color: cs.outline.withOpacity(0.5))),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      child: Text('или',
+                          style: GoogleFonts.notoSerif(
+                              color: cs.onSurfaceVariant, fontSize: 13)),
+                    ),
+                    Expanded(
+                        child: Divider(color: cs.outline.withOpacity(0.5))),
+                  ]),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: OutlinedButton.icon(
+                      onPressed: _loading ? null : _googleLogin,
+                      icon: Icon(Icons.g_mobiledata,
+                          size: 26, color: cs.primary),
+                      label: Text(
+                        'Войти через Google',
                         style: GoogleFonts.notoSerif(
-                            color: cs.onSurfaceVariant, fontSize: 13)),
-                  ),
-                  Expanded(
-                      child: Divider(color: cs.outline.withOpacity(0.5))),
-                ]),
-                const SizedBox(height: 16),
-
-                // Google button
-                SizedBox(
-                  width: double.infinity,
-                  height: 50,
-                  child: OutlinedButton.icon(
-                    onPressed: _loading ? null : _googleLogin,
-                    icon: Icon(Icons.g_mobiledata,
-                        size: 26, color: cs.primary),
-                    label: Text(
-                      'Войти через Google',
-                      style: GoogleFonts.notoSerif(
-                          fontSize: 14,
-                          color: cs.primary),
+                            fontSize: 14,
+                            color: cs.primary),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(height: 20),
+                  const SizedBox(height: 20),
+                ],
 
-                // Toggle register/login
-                TextButton(
-                  onPressed: () => setState(() {
-                    _isRegister = !_isRegister;
-                    _error = null;
-                  }),
-                  child: Text(
-                    _isRegister
-                        ? 'Уже есть аккаунт? Войти'
-                        : 'Нет аккаунта? Зарегистрироваться',
-                    style: GoogleFonts.notoSerif(
-                        color: cs.primary, fontSize: 13),
+                // Toggle register/login — скрывается если registration_enabled = false
+                if (registrationEnabled) ...[
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _isRegister = !_isRegister;
+                      _error = null;
+                    }),
+                    child: Text(
+                      _isRegister
+                          ? 'Уже есть аккаунт? Войти'
+                          : 'Нет аккаунта? Зарегистрироваться',
+                      style: GoogleFonts.notoSerif(
+                          color: cs.primary, fontSize: 13),
+                    ),
                   ),
-                ),
+                ],
                 const SizedBox(height: 8),
 
                 // Privacy policy notice
