@@ -16,8 +16,15 @@ class LoginScreen extends ConsumerStatefulWidget {
 
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   late bool _isRegister;
-  final _userCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
+
+  // Вход: username или email
+  final _loginCtrl    = TextEditingController();
+  // Регистрация: отдельные поля
+  final _emailCtrl    = TextEditingController();
+  final _usernameCtrl = TextEditingController();
+  // Общее
+  final _passCtrl     = TextEditingController();
+
   bool _obscure = true;
   bool _loading = false;
   String? _error;
@@ -30,28 +37,38 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   @override
   void dispose() {
-    _userCtrl.dispose();
+    _loginCtrl.dispose();
+    _emailCtrl.dispose();
+    _usernameCtrl.dispose();
     _passCtrl.dispose();
     super.dispose();
   }
 
   Future<void> _submit() async {
-    final u = _userCtrl.text.trim();
-    final p = _passCtrl.text;
-    if (u.isEmpty || p.isEmpty) {
-      setState(() => _error = 'Заполните все поля');
-      return;
-    }
-    setState(() { _loading = true; _error = null; });
-    final notifier = ref.read(authProvider.notifier);
-    String? error;
+    final password = _passCtrl.text;
+
     if (_isRegister) {
-      error = await notifier.register(u, p);
-      if (error == null) error = await notifier.login(u, p);
+      final email    = _emailCtrl.text.trim();
+      final username = _usernameCtrl.text.trim();
+      if (email.isEmpty || username.isEmpty || password.isEmpty) {
+        setState(() => _error = 'Заполните все поля');
+        return;
+      }
+      setState(() { _loading = true; _error = null; });
+      final notifier = ref.read(authProvider.notifier);
+      String? error = await notifier.register(email, password, username);
+      if (error == null) error = await notifier.login(email, password);
+      if (mounted) setState(() { _loading = false; _error = error; });
     } else {
-      error = await notifier.login(u, p);
+      final login = _loginCtrl.text.trim();
+      if (login.isEmpty || password.isEmpty) {
+        setState(() => _error = 'Заполните все поля');
+        return;
+      }
+      setState(() { _loading = true; _error = null; });
+      final error = await ref.read(authProvider.notifier).login(login, password);
+      if (mounted) setState(() { _loading = false; _error = error; });
     }
-    if (mounted) setState(() { _loading = false; _error = error; });
   }
 
   Future<void> _googleLogin() async {
@@ -64,10 +81,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final config = ref.watch(configProvider).valueOrNull;
-    final googleEnabled = config?.googleSigninEnabled ?? true;
+    final googleEnabled       = config?.googleSigninEnabled ?? true;
     final registrationEnabled = config?.registrationEnabled ?? true;
 
-    // Если регистрация отключена и пользователь на вкладке регистрации — переключаем
     if (_isRegister && !registrationEnabled) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) setState(() => _isRegister = false);
@@ -101,7 +117,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // Title
                 Text(
                   'Сборник стихов',
                   style: GoogleFonts.playfairDisplay(
@@ -121,16 +136,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 36),
 
-                // Username field
-                _StyledField(
-                  controller: _userCtrl,
-                  label: 'Имя пользователя',
-                  icon: Icons.person_outline_rounded,
-                  action: TextInputAction.next,
-                ),
-                const SizedBox(height: 12),
+                // ── Поля входа ──────────────────────────────────────────────
+                if (!_isRegister) ...[
+                  _StyledField(
+                    controller: _loginCtrl,
+                    label: 'Имя пользователя или Email',
+                    icon: Icons.person_outline_rounded,
+                    action: TextInputAction.next,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                ],
 
-                // Password field
+                // ── Поля регистрации ────────────────────────────────────────
+                if (_isRegister) ...[
+                  _StyledField(
+                    controller: _usernameCtrl,
+                    label: 'Имя пользователя',
+                    icon: Icons.person_outline_rounded,
+                    action: TextInputAction.next,
+                    keyboardType: TextInputType.text,
+                  ),
+                  const SizedBox(height: 12),
+                  _StyledField(
+                    controller: _emailCtrl,
+                    label: 'Email',
+                    icon: Icons.email_outlined,
+                    action: TextInputAction.next,
+                    keyboardType: TextInputType.emailAddress,
+                  ),
+                  const SizedBox(height: 12),
+                ],
+
+                // ── Пароль (всегда) ─────────────────────────────────────────
                 _StyledField(
                   controller: _passCtrl,
                   label: 'Пароль',
@@ -140,7 +178,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   onSubmitted: (_) => _submit(),
                   suffix: IconButton(
                     icon: Icon(
-                      _obscure ? Icons.visibility_off_rounded : Icons.visibility_rounded,
+                      _obscure
+                          ? Icons.visibility_off_rounded
+                          : Icons.visibility_rounded,
                       size: 20,
                       color: cs.onSurfaceVariant,
                     ),
@@ -153,7 +193,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 12),
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: cs.error.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(12),
@@ -187,8 +228,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                             height: 20,
                             width: 20,
                             child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: cs.onPrimary),
+                                strokeWidth: 2, color: cs.onPrimary),
                           )
                         : Text(
                             _isRegister ? 'Зарегистрироваться' : 'Войти',
@@ -200,19 +240,23 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Google button — скрывается если google_signin_enabled = false
+                // Google button
                 if (googleEnabled) ...[
                   Row(children: [
                     Expanded(
-                        child: Divider(color: cs.outline.withOpacity(0.5))),
+                        child: Divider(
+                            color: cs.outline.withOpacity(0.5))),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 14),
                       child: Text('или',
                           style: GoogleFonts.notoSerif(
-                              color: cs.onSurfaceVariant, fontSize: 13)),
+                              color: cs.onSurfaceVariant,
+                              fontSize: 13)),
                     ),
                     Expanded(
-                        child: Divider(color: cs.outline.withOpacity(0.5))),
+                        child: Divider(
+                            color: cs.outline.withOpacity(0.5))),
                   ]),
                   const SizedBox(height: 16),
                   SizedBox(
@@ -225,15 +269,14 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                       label: Text(
                         'Войти через Google',
                         style: GoogleFonts.notoSerif(
-                            fontSize: 14,
-                            color: cs.primary),
+                            fontSize: 14, color: cs.primary),
                       ),
                     ),
                   ),
                   const SizedBox(height: 20),
                 ],
 
-                // Toggle register/login — скрывается если registration_enabled = false
+                // Toggle register/login
                 if (registrationEnabled) ...[
                   TextButton(
                     onPressed: () => setState(() {
@@ -251,7 +294,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
                 const SizedBox(height: 8),
 
-                // Privacy policy notice
+                // Privacy policy
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: RichText(
@@ -307,6 +350,7 @@ class _StyledField extends StatelessWidget {
   final TextInputAction action;
   final ValueChanged<String>? onSubmitted;
   final Widget? suffix;
+  final TextInputType keyboardType;
 
   const _StyledField({
     required this.controller,
@@ -316,6 +360,7 @@ class _StyledField extends StatelessWidget {
     this.action = TextInputAction.next,
     this.onSubmitted,
     this.suffix,
+    this.keyboardType = TextInputType.text,
   });
 
   @override
@@ -325,6 +370,7 @@ class _StyledField extends StatelessWidget {
       controller: controller,
       obscureText: obscure,
       textInputAction: action,
+      keyboardType: keyboardType,
       onSubmitted: onSubmitted,
       style: GoogleFonts.notoSerif(color: cs.onSurface, fontSize: 14),
       decoration: InputDecoration(
