@@ -30,6 +30,16 @@ class ApiService {
       },
     ));
 
+  // ─── Config ───────────────────────────────────────────────────────────────
+  Future<Map<String, dynamic>?> fetchConfig() async {
+    try {
+      final res = await _dio.get('/api/config');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ─── Auth ─────────────────────────────────────────────────────────────────
   Future<({String? error, bool isAdmin, String username})> login(
       String username, String password) async {
@@ -78,7 +88,7 @@ class ApiService {
 
   Future<void> logout() async {
     try {
-      await _dio.post('/api/logout'); // исправлено: было .get
+      await _dio.post('/api/logout');
     } catch (_) {}
     await _storage.deleteAll();
   }
@@ -153,6 +163,11 @@ class ApiService {
       return res.data['response'] as String?;
     } on DioException catch (e) {
       if (e.response?.statusCode == 403) return '__no_access__';
+      if (e.response?.statusCode == 503) return '__ai_disabled__';
+      if (e.response?.statusCode == 429) {
+        final msg = e.response?.data?['error'] as String? ?? 'Лимит исчерпан';
+        return '__limit__:$msg';
+      }
       return null;
     }
   }
