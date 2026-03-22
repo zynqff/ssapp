@@ -10,7 +10,7 @@ import 'providers/config_provider.dart';
 import 'screens/poems_screen.dart';
 import 'screens/login_screen.dart';
 
-const String kAppVersion = '1.0.0';
+const String kAppVersion = '1.0.2';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
