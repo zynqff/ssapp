@@ -24,6 +24,7 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
   final _searchCtrl = TextEditingController();
   bool _showSearch = false;
   int _selectedTab = 0;
+  bool _bannerShown = false;
 
   @override
   void initState() {
@@ -34,6 +35,147 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
         setState(() => _selectedTab = _tabs.index);
       }
     });
+    WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowBanner());
+  }
+
+  void _maybeShowBanner() {
+    if (_bannerShown) return;
+    final config = ref.read(configProvider).valueOrNull;
+    if (config == null || config.bannerText.isEmpty) return;
+    _bannerShown = true;
+    _showBannerDialog(config.bannerText, config.bannerColor);
+  }
+
+  void _showBannerDialog(String text, String colorKey) {
+    final cs = Theme.of(context).colorScheme;
+    final bannerColor = switch (colorKey) {
+      'error'   => cs.error,
+      'warning' => const Color(0xFFE6A817),
+      _         => cs.primary,
+    };
+    final icon = switch (colorKey) {
+      'error'   => Icons.error_outline_rounded,
+      'warning' => Icons.warning_amber_rounded,
+      _         => Icons.info_outline_rounded,
+    };
+
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.55),
+      barrierDismissible: true,
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.transparent,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 80),
+        child: Container(
+          decoration: BoxDecoration(
+            color: cs.surface,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: bannerColor.withOpacity(0.4),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: bannerColor.withOpacity(0.15),
+                blurRadius: 24,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.fromLTRB(20, 18, 12, 18),
+                decoration: BoxDecoration(
+                  color: bannerColor.withOpacity(0.1),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(22),
+                    topRight: Radius.circular(22),
+                  ),
+                ),
+                child: Row(children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    decoration: BoxDecoration(
+                      color: bannerColor.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(icon, color: bannerColor, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      switch (colorKey) {
+                        'error'   => 'Важное уведомление',
+                        'warning' => 'Внимание',
+                        _         => 'Информация',
+                      },
+                      style: GoogleFonts.playfairDisplay(
+                        color: bannerColor,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: Icon(Icons.close_rounded,
+                        color: cs.onSurfaceVariant, size: 20),
+                    style: IconButton.styleFrom(
+                      backgroundColor: cs.surfaceVariant,
+                      fixedSize: const Size(34, 34),
+                      padding: EdgeInsets.zero,
+                    ),
+                  ),
+                ]),
+              ),
+
+              // Body
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                child: Text(
+                  text,
+                  style: GoogleFonts.notoSerif(
+                    color: cs.onSurface,
+                    fontSize: 14.5,
+                    height: 1.6,
+                  ),
+                ),
+              ),
+
+              // Button
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                child: SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: bannerColor,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(
+                      'Понятно',
+                      style: GoogleFonts.notoSerif(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -51,7 +193,12 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
     final isLoggedIn = user != null;
     final accent = ref.watch(themeProvider).accent;
     final bg = Theme.of(context).scaffoldBackgroundColor;
+
+    // Показываем баннер если конфиг загрузился после построения экрана
     final config = ref.watch(configProvider).valueOrNull;
+    if (config != null && config.bannerText.isNotEmpty && !_bannerShown) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowBanner());
+    }
 
     return Scaffold(
       body: Column(
@@ -66,7 +213,6 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Title row
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
@@ -144,7 +290,6 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
                         ),
                       ],
                     ),
-                    // Pill tabs
                     if (isLoggedIn) ...[
                       const SizedBox(height: 14),
                       _PillTabs(
@@ -163,10 +308,6 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
               ),
             ),
           ),
-
-          // ── Баннер из app_config ───────────────────────────────────────
-          if (config != null && config.bannerText.isNotEmpty)
-            _AppBanner(text: config.bannerText, color: config.bannerColor),
 
           // ── Body ──────────────────────────────────────────────────────
           Expanded(
@@ -207,45 +348,6 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
           ),
         ],
       ),
-    );
-  }
-}
-
-// ── App banner ────────────────────────────────────────────────────────────────
-
-class _AppBanner extends StatelessWidget {
-  final String text;
-  final String color;
-  const _AppBanner({required this.text, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final bannerColor = switch (color) {
-      'error'   => cs.error,
-      'warning' => const Color(0xFFE6A817),
-      _         => cs.primary, // info
-    };
-    final icon = switch (color) {
-      'error'   => Icons.error_outline_rounded,
-      'warning' => Icons.warning_amber_rounded,
-      _         => Icons.info_outline_rounded,
-    };
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      color: bannerColor.withOpacity(0.1),
-      child: Row(children: [
-        Icon(icon, size: 16, color: bannerColor),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: GoogleFonts.notoSerif(
-                color: bannerColor, fontSize: 12.5),
-          ),
-        ),
-      ]),
     );
   }
 }
@@ -305,9 +407,7 @@ class _PillTabs extends StatelessWidget {
               curve: Curves.easeOut,
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 9),
               decoration: BoxDecoration(
-                color: active
-                    ? accent.withOpacity(0.18)
-                    : cs.surfaceVariant,
+                color: active ? accent.withOpacity(0.18) : cs.surfaceVariant,
                 borderRadius: BorderRadius.circular(30),
                 border: Border.all(
                   color: active ? accent.withOpacity(0.6) : cs.outline,
