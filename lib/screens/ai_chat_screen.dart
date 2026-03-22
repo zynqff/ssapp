@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/config_provider.dart';
 import '../models/chat_message.dart';
 import '../services/sync_service.dart';
 
@@ -67,6 +68,10 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
     if (user == null) {
       return const Scaffold(body: Center(child: Text('Войдите')));
     }
+
+    final config = ref.watch(configProvider).valueOrNull;
+    final aiEnabled = config?.aiEnabled ?? true;
+
     final msgs = ref.watch(chatProvider(user.username));
     final cs = Theme.of(context).colorScheme;
 
@@ -155,6 +160,21 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
         ],
       ),
       body: Column(children: [
+        // AI отключён администратором
+        if (!aiEnabled)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 9),
+            color: cs.onSurfaceVariant.withOpacity(0.08),
+            child: Row(children: [
+              Icon(Icons.smart_toy_outlined, size: 15, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Text('AI чат временно недоступен',
+                  style: GoogleFonts.notoSerif(
+                      color: cs.onSurfaceVariant, fontSize: 12.5)),
+            ]),
+          ),
+
         // Offline banner
         if (_offline)
           Container(
@@ -221,11 +241,11 @@ class _AiChatScreenState extends ConsumerState<AiChatScreen> {
           ),
         ),
 
-        // Input bar
+        // Input bar — заблокирован если AI отключён или нет интернета
         _InputBar(
           ctrl: _ctrl,
           sending: _sending,
-          disabled: _offline,
+          disabled: _offline || !aiEnabled,
           onSend: _send,
         ),
       ]),
@@ -389,7 +409,7 @@ class _InputBar extends StatelessWidget {
               style: GoogleFonts.notoSerif(
                   color: cs.onSurface, fontSize: 14),
               decoration: InputDecoration(
-                hintText: 'Сообщение...',
+                hintText: disabled ? 'AI недоступен' : 'Сообщение...',
                 hintStyle: GoogleFonts.notoSerif(
                     color: cs.onSurfaceVariant, fontSize: 14),
                 border: InputBorder.none,
