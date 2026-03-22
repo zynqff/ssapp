@@ -43,7 +43,9 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
     final config = ref.read(configProvider).valueOrNull;
     if (config == null || config.bannerText.isEmpty) return;
     _bannerShown = true;
-    _showBannerDialog(config.bannerText, config.bannerColor);
+    Future.delayed(const Duration(milliseconds: 600), () {
+      if (mounted) _showBannerDialog(config.bannerText, config.bannerColor);
+    });
   }
 
   void _showBannerDialog(String text, String colorKey) {
