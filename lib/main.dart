@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -5,8 +6,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/poems_provider.dart';
+import 'providers/config_provider.dart';
 import 'screens/poems_screen.dart';
 import 'screens/login_screen.dart';
+
+// Текущая версия приложения
+const String kAppVersion = '1.0.0';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -150,18 +155,251 @@ class _Root extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final configAsync = ref.watch(configProvider);
     final auth = ref.watch(authProvider);
+
+    // Пока конфиг грузится — показываем ConnectingScreen
+    return configAsync.when(
+      loading: () => const _ConnectingScreen(),
+      error: (_, __) {
+        // Если конфиг недоступен — продолжаем с дефолтными значениями
+        return _buildAuthScreen(auth);
+      },
+      data: (config) {
+        // Тех. перерыв
+        if (config.isUnderMaintenance) {
+          return _MaintenanceScreen(until: config.maintenanceUntil!);
+        }
+
+        // Принудительное обновление
+        if (_shouldForceUpdate(config.forceUpdateVersion)) {
+          return const _ForceUpdateScreen();
+        }
+
+        return _buildAuthScreen(auth);
+      },
+    );
+  }
+
+  Widget _buildAuthScreen(AsyncValue<dynamic> auth) {
     return auth.when(
-      // Показываем loading только при реально первом входе (нет локальных данных)
       loading: () => const _ConnectingScreen(),
       error: (e, _) => _ServerErrorScreen(message: e.toString()),
       data: (user) =>
           user != null ? const PoemsScreen() : const LoginScreen(),
     );
   }
+
+  bool _shouldForceUpdate(String minVersion) {
+    if (minVersion == '0.0.0') return false;
+    try {
+      final min = minVersion.split('.').map(int.parse).toList();
+      final cur = kAppVersion.split('.').map(int.parse).toList();
+      for (var i = 0; i < 3; i++) {
+        final m = i < min.length ? min[i] : 0;
+        final c = i < cur.length ? cur[i] : 0;
+        if (c < m) return true;
+        if (c > m) return false;
+      }
+      return false;
+    } catch (_) {
+      return false;
+    }
+  }
 }
 
-// Экран "Подключение к серверу..." — показывается только при первом входе
+// ── Экран тех. перерыва с обратным отсчётом ───────────────────────────────────
+
+class _MaintenanceScreen extends StatefulWidget {
+  final DateTime until;
+  const _MaintenanceScreen({required this.until});
+
+  @override
+  State<_MaintenanceScreen> createState() => _MaintenanceScreenState();
+}
+
+class _MaintenanceScreenState extends State<_MaintenanceScreen> {
+  late Timer _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+  }
+
+  @override
+  void dispose() {
+    _timer.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final remaining = widget.until.difference(DateTime.now());
+
+    // Время вышло — перезагружаем конфиг
+    if (remaining.isNegative) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (context.mounted) {
+          final container = ProviderScope.containerOf(context);
+          container.read(configProvider.notifier).reload();
+        }
+      });
+    }
+
+    final h = remaining.inHours;
+    final m = remaining.inMinutes % 60;
+    final s = remaining.inSeconds % 60;
+
+    final timeStr = h > 0
+        ? '$h ч $m мин $s сек'
+        : m > 0
+            ? '$m мин $s сек'
+            : '$s сек';
+
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: cs.primary.withOpacity(0.3),
+                    width: 1.2,
+                  ),
+                ),
+                child: Icon(Icons.build_outlined, size: 34, color: cs.primary),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Технические работы',
+                style: GoogleFonts.playfairDisplay(
+                  color: cs.onSurface,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Мы скоро вернёмся. Спасибо за терпение!',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSerif(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 14,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 28),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 24, vertical: 14),
+                decoration: BoxDecoration(
+                  color: cs.surfaceVariant,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: cs.outline, width: 0.8),
+                ),
+                child: Column(children: [
+                  Text(
+                    'Осталось',
+                    style: GoogleFonts.notoSerif(
+                      color: cs.onSurfaceVariant,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    remaining.isNegative ? 'Завершаем...' : timeStr,
+                    style: GoogleFonts.playfairDisplay(
+                      color: cs.primary,
+                      fontSize: 26,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ]),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Экран принудительного обновления ─────────────────────────────────────────
+
+class _ForceUpdateScreen extends StatelessWidget {
+  const _ForceUpdateScreen();
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  color: cs.primary.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(22),
+                ),
+                child: Icon(Icons.system_update_rounded,
+                    size: 34, color: cs.primary),
+              ),
+              const SizedBox(height: 24),
+              Text(
+                'Доступно обновление',
+                style: GoogleFonts.playfairDisplay(
+                  color: cs.onSurface,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'Пожалуйста, обновите приложение чтобы продолжить.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.notoSerif(
+                  color: cs.onSurfaceVariant,
+                  fontSize: 14,
+                  height: 1.6,
+                ),
+              ),
+              const SizedBox(height: 28),
+              FilledButton.icon(
+                onPressed: () {
+                  // TODO: открыть ссылку на RuStore/магазин
+                },
+                icon: const Icon(Icons.download_rounded),
+                label: Text(
+                  'Обновить',
+                  style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Экран подключения ─────────────────────────────────────────────────────────
+
 class _ConnectingScreen extends ConsumerWidget {
   const _ConnectingScreen();
 
@@ -219,7 +457,8 @@ class _ConnectingScreen extends ConsumerWidget {
   }
 }
 
-// Экран ошибки подключения — с кнопкой повтора
+// ── Экран ошибки подключения ──────────────────────────────────────────────────
+
 class _ServerErrorScreen extends ConsumerWidget {
   final String message;
   const _ServerErrorScreen({required this.message});
@@ -234,7 +473,8 @@ class _ServerErrorScreen extends ConsumerWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.wifi_off_rounded, size: 56, color: cs.onSurfaceVariant.withOpacity(0.4)),
+              Icon(Icons.wifi_off_rounded,
+                  size: 56, color: cs.onSurfaceVariant.withOpacity(0.4)),
               const SizedBox(height: 20),
               Text(
                 message,
@@ -248,9 +488,9 @@ class _ServerErrorScreen extends ConsumerWidget {
               const SizedBox(height: 24),
               FilledButton.icon(
                 onPressed: () {
-                  // Переинициализируем провайдер
                   ref.invalidate(authProvider);
                   ref.invalidate(poemsProvider);
+                  ref.invalidate(configProvider);
                 },
                 icon: const Icon(Icons.refresh_rounded),
                 label: Text(
@@ -260,10 +500,7 @@ class _ServerErrorScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 12),
               TextButton(
-                onPressed: () {
-                  // Открыть экран входа без сервера — нельзя, но можно посмотреть стихи офлайн
-                  // если уже были данные (этот экран не покажется в таком случае)
-                },
+                onPressed: () {},
                 child: Text(
                   'Попробовать позже',
                   style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant),
