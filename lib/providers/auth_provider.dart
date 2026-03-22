@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../models/user.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
@@ -31,7 +31,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       if (session == null) {
         state = const AsyncValue.data(null);
       } else {
-        await _loadUser(session.user, isFirstTime: false);
+        await _loadUser(session.user.id, isFirstTime: false);
       }
     });
 
@@ -43,63 +43,46 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
     final hasLocal = await _db.hasPoems();
     if (hasLocal) {
-      final user = await _loadUserFromLocal(session.user);
+      final user = await _fetchUserRow(session.user.id);
       if (user != null) {
-        state = AsyncValue.data(user);
+        final readPoems = await _db.getReadPoems(user.username);
+        final pinned = await _db.getPinnedPoem(user.username);
+        final localUser = user.copyWith(readPoems: readPoems, pinnedPoemId: pinned);
+        state = AsyncValue.data(localUser);
         _backgroundSync(user.username);
         return;
       }
     }
 
-    await _loadUser(session.user, isFirstTime: true);
+    await _loadUser(session.user.id, isFirstTime: true);
   }
 
-  Future<void> _loadUser(User supabaseUser, {bool isFirstTime = false}) async {
+  Future<User?> _fetchUserRow(String uid) async {
     try {
       final data = await _supabase
           .from('user')
           .select()
-          .eq('supabase_uid', supabaseUser.id)
+          .eq('supabase_uid', uid)
           .single();
-      final user = _userFromRow(data);
-      await _db.setReadPoems(user.username, user.readPoems);
-      if (mounted) state = AsyncValue.data(user);
-      _backgroundSync(user.username);
-    } catch (e) {
-      if (isFirstTime) {
-        if (mounted) {
-          state = AsyncValue.error(
-            'Ошибка загрузки профиля. Проверьте интернет.',
-            StackTrace.current,
-          );
-        }
-      } else {
-        final user = await _loadUserFromLocal(supabaseUser);
-        if (user != null && mounted) state = AsyncValue.data(user);
-      }
+      return _userFromRow(data);
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<User?> _loadUserFromLocal(User supabaseUser) async {
-    try {
-      final data = await _supabase
-          .from('user')
-          .select()
-          .eq('supabase_uid', supabaseUser.id)
-          .single();
-      final username = data['username'] as String;
-      final readPoems = await _db.getReadPoems(username);
-      final pinned = await _db.getPinnedPoem(username);
-      return User(
-        username: username,
-        isAdmin: data['is_admin'] as bool? ?? false,
-        readPoems: readPoems,
-        pinnedPoemId: pinned,
-        showAllTab: data['show_all_tab'] as bool? ?? false,
-        userData: data['user_data'] as String? ?? '',
-      );
-    } catch (_) {
-      return null;
+  Future<void> _loadUser(String uid, {bool isFirstTime = false}) async {
+    final user = await _fetchUserRow(uid);
+    if (user != null) {
+      await _db.setReadPoems(user.username, user.readPoems);
+      if (mounted) state = AsyncValue.data(user);
+      _backgroundSync(user.username);
+    } else if (isFirstTime) {
+      if (mounted) {
+        state = AsyncValue.error(
+          'Ошибка загрузки профиля. Проверьте интернет.',
+          StackTrace.current,
+        );
+      }
     }
   }
 
@@ -122,20 +105,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       await _sync.fullSync(username);
       final session = _supabase.auth.currentSession;
       if (session == null) return;
-      final data = await _supabase
-          .from('user')
-          .select()
-          .eq('supabase_uid', session.user.id)
-          .single();
-      final user = _userFromRow(data);
-      await _db.setReadPoems(user.username, user.readPoems);
-      if (mounted && state.value != null) {
-        state = AsyncValue.data(user);
+      final user = await _fetchUserRow(session.user.id);
+      if (user != null) {
+        await _db.setReadPoems(user.username, user.readPoems);
+        if (mounted && state.value != null) state = AsyncValue.data(user);
       }
     } catch (_) {}
   }
 
-  // ── Вход: по email ИЛИ username ───────────────────────────────────────────
+  // ── Вход ──────────────────────────────────────────────────────────────────
 
   Future<String?> login(String usernameOrEmail, String password) async {
     state = const AsyncValue.loading();
@@ -149,15 +127,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         return 'Пользователь не найден';
       }
 
-      await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
+      await _supabase.auth.signInWithPassword(email: email, password: password);
       return null;
     } on AuthException catch (e) {
       state = const AsyncValue.data(null);
       return e.message;
-    } catch (e) {
+    } catch (_) {
       state = const AsyncValue.data(null);
       return 'Ошибка входа';
     }
@@ -195,7 +170,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         data: {'username': username},
       );
 
-      // Триггер handle_new_user создаёт запись в user — даём ему время
+      // Триггер создаёт запись в user — даём ему время
       await Future.delayed(const Duration(milliseconds: 500));
       await _supabase
           .from('user')
@@ -205,12 +180,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       return null;
     } on AuthException catch (e) {
       return e.message;
-    } catch (e) {
+    } catch (_) {
       return 'Ошибка регистрации';
     }
   }
 
-  // ── Google Sign-In ─────────────────────────────────────────────────────────
+  // ── Google ─────────────────────────────────────────────────────────────────
 
   Future<String?> loginWithGoogle() async {
     try {
@@ -226,7 +201,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         accessToken: auth.accessToken,
       );
 
-      // Сохраняем email если ещё не сохранён
       final session = _supabase.auth.currentSession;
       if (session != null) {
         final email = session.user.email;
@@ -275,8 +249,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
             .update({'read_poems_json': newList})
             .eq('supabase_uid', _supabase.auth.currentUser!.id);
       } catch (_) {
-        await _db.addToSyncQueue(
-            'toggle_read', jsonEncode({'poem_id': poemId}));
+        await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
       }
     } else {
       await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
@@ -303,8 +276,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
             .update({'pinned_poem_id': newPinned})
             .eq('supabase_uid', _supabase.auth.currentUser!.id);
       } catch (_) {
-        await _db.addToSyncQueue(
-            'toggle_pin', jsonEncode({'poem_id': poemId}));
+        await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
       }
     } else {
       await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
@@ -344,7 +316,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       return null;
     } on AuthException catch (e) {
       return e.message;
-    } catch (e) {
+    } catch (_) {
       return 'Ошибка обновления';
     }
   }
