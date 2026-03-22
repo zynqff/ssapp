@@ -26,7 +26,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   );
 
   Future<void> _init() async {
-    // Слушаем изменения сессии Supabase
     _supabase.auth.onAuthStateChange.listen((data) async {
       final session = data.session;
       if (session == null) {
@@ -36,7 +35,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       }
     });
 
-    // Проверяем текущую сессию
     final session = _supabase.auth.currentSession;
     if (session == null) {
       state = const AsyncValue.data(null);
@@ -45,7 +43,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
     final hasLocal = await _db.hasPoems();
     if (hasLocal) {
-      // Есть локальные данные — показываем сразу, синхронизируем в фоне
       final user = await _loadUserFromLocal(session.user);
       if (user != null) {
         state = AsyncValue.data(user);
@@ -57,14 +54,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     await _loadUser(session.user, isFirstTime: true);
   }
 
-  Future<void> _loadUser(User session, {bool isFirstTime = false}) async {
+  Future<void> _loadUser(User supabaseUser, {bool isFirstTime = false}) async {
     try {
       final data = await _supabase
           .from('user')
           .select()
-          .eq('supabase_uid', session.id)
+          .eq('supabase_uid', supabaseUser.id)
           .single();
-
       final user = _userFromRow(data);
       await _db.setReadPoems(user.username, user.readPoems);
       if (mounted) state = AsyncValue.data(user);
@@ -78,20 +74,17 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           );
         }
       } else {
-        // Не первый запуск — пробуем локальные данные
-        final user = await _loadUserFromLocal(session);
+        final user = await _loadUserFromLocal(supabaseUser);
         if (user != null && mounted) state = AsyncValue.data(user);
       }
     }
   }
 
   Future<User?> _loadUserFromLocal(User supabaseUser) async {
-    // Пробуем найти username по uid в локальной БД
-    // Если нет — возвращаем null
     try {
       final data = await _supabase
           .from('user')
-          .select('username, is_admin, read_poems_json, pinned_poem_id, show_all_tab, user_data')
+          .select()
           .eq('supabase_uid', supabaseUser.id)
           .single();
       final username = data['username'] as String;
@@ -127,7 +120,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<void> _backgroundSync(String username) async {
     try {
       await _sync.fullSync(username);
-      // Обновляем read/pin из Supabase
       final session = _supabase.auth.currentSession;
       if (session == null) return;
       final data = await _supabase
@@ -143,16 +135,24 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     } catch (_) {}
   }
 
-  // ── Вход по email/паролю ───────────────────────────────────────────────────
+  // ── Вход: по email ИЛИ username ───────────────────────────────────────────
 
-  Future<String?> login(String email, String password) async {
+  Future<String?> login(String usernameOrEmail, String password) async {
     state = const AsyncValue.loading();
     try {
+      final email = usernameOrEmail.contains('@')
+          ? usernameOrEmail
+          : await _findEmailByUsername(usernameOrEmail);
+
+      if (email == null) {
+        state = const AsyncValue.data(null);
+        return 'Пользователь не найден';
+      }
+
       await _supabase.auth.signInWithPassword(
         email: email,
         password: password,
       );
-      // _init слушает onAuthStateChange — state обновится автоматически
       return null;
     } on AuthException catch (e) {
       state = const AsyncValue.data(null);
@@ -163,16 +163,45 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
+  Future<String?> _findEmailByUsername(String username) async {
+    try {
+      final rows = await _supabase
+          .from('user')
+          .select('email')
+          .eq('username', username)
+          .limit(1);
+      if (rows.isEmpty) return null;
+      return rows.first['email'] as String?;
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Регистрация ────────────────────────────────────────────────────────────
 
   Future<String?> register(String email, String password, String username) async {
     if (password.length < 8) return 'Пароль не менее 8 символов';
     try {
+      final existing = await _supabase
+          .from('user')
+          .select('username')
+          .eq('username', username)
+          .limit(1);
+      if (existing.isNotEmpty) return 'Имя пользователя уже занято';
+
       await _supabase.auth.signUp(
         email: email,
         password: password,
-        data: {'username': username}, // триггер handle_new_user использует это
+        data: {'username': username},
       );
+
+      // Триггер handle_new_user создаёт запись в user — даём ему время
+      await Future.delayed(const Duration(milliseconds: 500));
+      await _supabase
+          .from('user')
+          .update({'email': email})
+          .eq('username', username);
+
       return null;
     } on AuthException catch (e) {
       return e.message;
@@ -196,6 +225,20 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         idToken: idToken,
         accessToken: auth.accessToken,
       );
+
+      // Сохраняем email если ещё не сохранён
+      final session = _supabase.auth.currentSession;
+      if (session != null) {
+        final email = session.user.email;
+        if (email != null) {
+          await _supabase
+              .from('user')
+              .update({'email': email})
+              .eq('supabase_uid', session.user.id)
+              .isFilter('email', null);
+        }
+      }
+
       return null;
     } on AuthException catch (e) {
       return e.message;
@@ -220,13 +263,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     final user = state.value;
     if (user == null) return;
 
-    // Оптимистичное обновление UI
     final action = await _db.toggleReadPoem(user.username, poemId);
     final newList = List<int>.from(user.readPoems);
     action == 'marked' ? newList.add(poemId) : newList.remove(poemId);
     state = AsyncValue.data(user.copyWith(readPoems: newList));
 
-    // Синхронизируем с Supabase
     if (await _sync.isOnline()) {
       try {
         await _supabase
@@ -234,7 +275,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
             .update({'read_poems_json': newList})
             .eq('supabase_uid', _supabase.auth.currentUser!.id);
       } catch (_) {
-        await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
+        await _db.addToSyncQueue(
+            'toggle_read', jsonEncode({'poem_id': poemId}));
       }
     } else {
       await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
@@ -261,7 +303,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
             .update({'pinned_poem_id': newPinned})
             .eq('supabase_uid', _supabase.auth.currentUser!.id);
       } catch (_) {
-        await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
+        await _db.addToSyncQueue(
+            'toggle_pin', jsonEncode({'poem_id': poemId}));
       }
     } else {
       await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
@@ -279,12 +322,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     if (user == null) return 'Не авторизован';
 
     try {
-      // Смена пароля через Supabase Auth
       if (newPassword != null) {
         await _supabase.auth.updateUser(UserAttributes(password: newPassword));
       }
 
-      // Обновление данных профиля напрямую в таблицу
       final updates = <String, dynamic>{};
       if (userData != null) updates['user_data'] = userData;
       if (showAllTab != null) updates['show_all_tab'] = showAllTab;
