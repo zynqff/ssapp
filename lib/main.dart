@@ -10,7 +10,6 @@ import 'providers/config_provider.dart';
 import 'screens/poems_screen.dart';
 import 'screens/login_screen.dart';
 
-// Текущая версия приложения
 const String kAppVersion = '1.0.0';
 
 void main() {
@@ -158,35 +157,23 @@ class _Root extends ConsumerWidget {
     final configAsync = ref.watch(configProvider);
     final auth = ref.watch(authProvider);
 
-    // Пока конфиг грузится — показываем ConnectingScreen
-    return configAsync.when(
-      loading: () => const _ConnectingScreen(),
-      error: (_, __) {
-        // Если конфиг недоступен — продолжаем с дефолтными значениями
-        return _buildAuthScreen(auth);
-      },
-      data: (config) {
-        // Тех. перерыв
-        if (config.isUnderMaintenance) {
-          return _MaintenanceScreen(until: config.maintenanceUntil!);
-        }
-
-        // Принудительное обновление
-        if (_shouldForceUpdate(config.forceUpdateVersion)) {
-          return const _ForceUpdateScreen();
-        }
-
-        return _buildAuthScreen(auth);
-      },
-    );
-  }
-
-  Widget _buildAuthScreen(AsyncValue<dynamic> auth) {
+    // Ждём только auth — конфиг грузится параллельно в фоне
     return auth.when(
       loading: () => const _ConnectingScreen(),
       error: (e, _) => _ServerErrorScreen(message: e.toString()),
-      data: (user) =>
-          user != null ? const PoemsScreen() : const LoginScreen(),
+      data: (user) {
+        // Конфиг уже готов — проверяем тех. перерыв и force update
+        final config = configAsync.valueOrNull;
+        if (config != null) {
+          if (config.isUnderMaintenance) {
+            return _MaintenanceScreen(until: config.maintenanceUntil!);
+          }
+          if (_shouldForceUpdate(config.forceUpdateVersion)) {
+            return const _ForceUpdateScreen();
+          }
+        }
+        return user != null ? const PoemsScreen() : const LoginScreen();
+      },
     );
   }
 
@@ -240,7 +227,6 @@ class _MaintenanceScreenState extends State<_MaintenanceScreen> {
     final cs = Theme.of(context).colorScheme;
     final remaining = widget.until.difference(DateTime.now());
 
-    // Время вышло — перезагружаем конфиг
     if (remaining.isNegative) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (context.mounted) {
@@ -301,8 +287,7 @@ class _MaintenanceScreenState extends State<_MaintenanceScreen> {
               ),
               const SizedBox(height: 28),
               Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
                 decoration: BoxDecoration(
                   color: cs.surfaceVariant,
                   borderRadius: BorderRadius.circular(16),
@@ -382,7 +367,7 @@ class _ForceUpdateScreen extends StatelessWidget {
               const SizedBox(height: 28),
               FilledButton.icon(
                 onPressed: () {
-                  // TODO: открыть ссылку на RuStore/магазин
+                  // TODO: открыть ссылку на RuStore
                 },
                 icon: const Icon(Icons.download_rounded),
                 label: Text(
