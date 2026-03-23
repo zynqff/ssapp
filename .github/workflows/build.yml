@@ -27,54 +27,29 @@ jobs:
           flutter-version: '3.41.4'
 
       - name: Write google-services.json
-        run: |
-          echo '${{ secrets.GOOGLE_SERVICES_JSON }}' \
-            > android/app/google-services.json
+        run: echo '${{ secrets.GOOGLE_SERVICES_JSON }}' > android/app/google-services.json
 
       - name: Get dependencies
         run: flutter pub get
 
       - name: Generate launcher icons
         run: |
-          rm -rf android/app/src/main/res/mipmap-hdpi
-          rm -rf android/app/src/main/res/mipmap-mdpi
-          rm -rf android/app/src/main/res/mipmap-xhdpi
-          rm -rf android/app/src/main/res/mipmap-xxhdpi
-          rm -rf android/app/src/main/res/mipmap-xxxhdpi
+          rm -rf android/app/src/main/res/mipmap-*
           dart run flutter_launcher_icons
 
-      - name: Create gradlew
-        run: |
-          ls android/gradlew 2>/dev/null || (cd android && gradle wrapper --gradle-version 8.11.1)
-          chmod +x android/gradlew
-
-      - name: Write local.properties
+      - name: Setup local.properties
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
 
       - name: Decode keystore
-        run: |
-          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
-            > ${{ github.workspace }}/sscollective-key.jks
+        run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
 
-      - name: Build APK (split by ABI)
+      - name: Build
         run: |
+          chmod +x android/gradlew
           cd android
-          ./gradlew assembleRelease -PsplitApk=true -PshrinkRes=true
-        env:
-          KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
-          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-
-      - name: Stop Gradle daemon
-        run: cd android && ./gradlew --stop
-
-      - name: Build AAB
-        run: |
-          cd android
-          ./gradlew bundleRelease
+          ./gradlew assembleRelease bundleRelease -PsplitApk=true -PshrinkRes=true
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -85,15 +60,15 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
-            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
-            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
-            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
-            ${{ github.workspace }}/android/app/build/outputs/bundle/release/app-release.aab
+            android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+            android/app/build/outputs/apk/release/app-x86_64-release.apk
+            android/app/build/outputs/apk/release/app-universal-release.apk
+            android/app/build/outputs/bundle/release/app-release.aab
           name: SSApp ${{ github.ref_name }}
           body: |
             ### Для установки (APK)
-            - **arm64-v8a** — все современные устройства (2017+), выбирай этот если не знаешь какой
+            - **arm64-v8a** — все современные устройства (2017+)
             - **armeabi-v7a** — старые 32-bit устройства
             - **x86_64** — эмуляторы и Chromebook
             - **universal** — работает на всех, но весит больше
