@@ -4,21 +4,16 @@ plugins {
     id("com.google.gms.google-services")
     id("dev.flutter.flutter-gradle-plugin")
 }
-
 android {
     namespace = "com.sscollective.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = "27.0.12077973"
-
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
-
     kotlinOptions {
         jvmTarget = JavaVersion.VERSION_11.toString()
     }
-
     defaultConfig {
         applicationId = "com.sscollective.app"
         minSdk = flutter.minSdkVersion
@@ -26,8 +21,6 @@ android {
         versionCode = 3
         versionName = "1.0.3"
     }
-
-    // --- ПОДПИСЬ ---
     signingConfigs {
         create("release") {
             keyAlias = System.getenv("KEY_ALIAS")
@@ -39,7 +32,6 @@ android {
             }
         }
     }
-
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("release")
@@ -54,8 +46,6 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
-
-    // splits только для APK, для bundle не нужны
     splits {
         abi {
             isEnable = gradle.startParameter.taskNames.any { it.contains("assemble") }
@@ -65,7 +55,6 @@ android {
         }
     }
 }
-
 flutter {
     source = "../.."
 }
