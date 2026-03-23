@@ -44,14 +44,15 @@ jobs:
           dart run flutter_launcher_icons
 
       - name: Create gradlew
+        working-directory: android
         run: |
-          if [ ! -f android/gradlew ]; then
+          if [ ! -f gradlew ]; then
             curl -L https://services.gradle.org/distributions/gradle-8.11.1-bin.zip \
               -o /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/
-            cd android && /tmp/gradle-8.11.1/bin/gradle wrapper --gradle-version 8.11.1
+            /tmp/gradle-8.11.1/bin/gradle wrapper --gradle-version 8.11.1
           fi
-          chmod +x android/gradlew
+          chmod +x gradlew
 
       - name: Decode keystore
         run: |
