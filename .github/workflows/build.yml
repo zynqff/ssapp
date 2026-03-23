@@ -52,12 +52,6 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
-          DEFINES=$(printf '%s' \
-            "SUPABASE_URL=https://ymnbrazhehyafkkvzpnt.supabase.co," \
-            "SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbmJyYXpoZWh5YWZra3Z6cG50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTk2NDEsImV4cCI6MjA4MzQzNTY0MX0.1Idd7OuDuuz9yDn2g3CzIdpAOWMSe-JGHkwbfkgXJAE," \
-            "GOOGLE_CLIENT_ID=72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com")
-          B64=$(echo -n "$DEFINES" | base64 -w 0)
-          echo "dart.defines=$B64" >> android/local.properties
 
       - name: Decode keystore
         run: |
