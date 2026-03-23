@@ -55,10 +55,10 @@ android {
         }
     }
 
-    // --- СПЛИТ APK ПО АРХИТЕКТУРЕ ---
+    // splits только для APK, для bundle не нужны
     splits {
         abi {
-            isEnable = true
+            isEnable = gradle.startParameter.taskNames.any { it.contains("assemble") }
             reset()
             include("arm64-v8a", "armeabi-v7a", "x86_64")
             isUniversalApk = true
