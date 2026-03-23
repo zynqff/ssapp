@@ -8,7 +8,7 @@ plugins {
 android {
     namespace = "com.sscollective.app"
     compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_11
@@ -55,7 +55,15 @@ android {
         }
     }
 
-    // splits убраны — Flutter CLI сам управляет разбивкой через --split-per-abi
+    // --- СПЛИТ APK ПО АРХИТЕКТУРЕ ---
+    splits {
+        abi {
+            isEnable = true
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64")
+            isUniversalApk = true
+        }
+    }
 }
 
 flutter {
