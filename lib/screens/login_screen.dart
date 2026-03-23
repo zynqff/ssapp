@@ -28,6 +28,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _obscure = true;
   bool _loading = false;
   String? _error;
+  String? _info; // не-ошибочные сообщения (подтверждение email и т.п.)
 
   @override
   void initState() {
@@ -54,25 +55,39 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         setState(() => _error = 'Заполните все поля');
         return;
       }
-      setState(() { _loading = true; _error = null; });
-      final notifier = ref.read(authProvider.notifier);
-      String? error = await notifier.register(email, password, username);
-      if (error == null) error = await notifier.login(email, password);
-      if (mounted) setState(() { _loading = false; _error = error; });
+      setState(() { _loading = true; _error = null; _info = null; });
+      final result = await ref.read(authProvider.notifier).register(email, password, username);
+
+      if (!mounted) return;
+
+      if (result == null) {
+        // Успех — authProvider сам переключит экран
+        setState(() => _loading = false);
+      } else if (result.startsWith('confirm_email:')) {
+        // Email confirmation включён
+        final sentTo = result.substring('confirm_email:'.length);
+        setState(() {
+          _loading = false;
+          _info = 'Письмо отправлено на $sentTo. Подтвердите email и войдите.';
+          _isRegister = false; // переключаем на форму входа
+        });
+      } else {
+        setState(() { _loading = false; _error = result; });
+      }
     } else {
       final login = _loginCtrl.text.trim();
       if (login.isEmpty || password.isEmpty) {
         setState(() => _error = 'Заполните все поля');
         return;
       }
-      setState(() { _loading = true; _error = null; });
+      setState(() { _loading = true; _error = null; _info = null; });
       final error = await ref.read(authProvider.notifier).login(login, password);
       if (mounted) setState(() { _loading = false; _error = error; });
     }
   }
 
   Future<void> _googleLogin() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() { _loading = true; _error = null; _info = null; });
     final error = await ref.read(authProvider.notifier).loginWithGoogle();
     if (mounted) setState(() { _loading = false; _error = error; });
   }
@@ -188,6 +203,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
 
+                // Info (напр. подтверждение email)
+                if (_info != null) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: cs.primary.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                          color: cs.primary.withOpacity(0.3), width: 0.8),
+                    ),
+                    child: Row(children: [
+                      Icon(Icons.info_outline_rounded,
+                          color: cs.primary, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _info!,
+                          style: GoogleFonts.notoSerif(
+                              color: cs.primary, fontSize: 13),
+                        ),
+                      ),
+                    ]),
+                  ),
+                ],
+
                 // Error
                 if (_error != null) ...[
                   const SizedBox(height: 12),
@@ -282,6 +325,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     onPressed: () => setState(() {
                       _isRegister = !_isRegister;
                       _error = null;
+                      _info = null;
                     }),
                     child: Text(
                       _isRegister
