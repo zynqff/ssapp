@@ -21,9 +21,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final _sync = SyncService();
 
   final _googleSignIn = GoogleSignIn(
-    scopes: ['email'],
-    serverClientId: const String.fromEnvironment('GOOGLE_CLIENT_ID'),
-  );
+  scopes: ['email'],
+  serverClientId: const String.fromEnvironment(
+    'GOOGLE_CLIENT_ID',
+    defaultValue: '72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com',
+  ),
+);
 
   Future<void> _init() async {
     _supabase.auth.onAuthStateChange.listen((data) async {
