@@ -60,7 +60,6 @@ jobs:
             > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK + AAB
-        continue-on-error: true
         run: |
           flutter build apk --release --split-per-abi \
             --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
@@ -80,29 +79,22 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Find APK
-        run: |
-          echo "=== APK files ==="
-          find ${{ github.workspace }} -name "*.apk" 2>/dev/null || echo "No APK found"
-          echo "=== AAB files ==="
-          find ${{ github.workspace }} -name "*.aab" 2>/dev/null || echo "No AAB found"
-          echo "=== build/app/outputs ==="
-          ls -la ${{ github.workspace }}/build/app/outputs/ 2>/dev/null || echo "outputs dir not found"
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ github.workspace }}/build/app/outputs/apk/release/app-arm64-v8a-release.apk
-            ${{ github.workspace }}/build/app/outputs/apk/release/app-armeabi-v7a-release.apk
-            ${{ github.workspace }}/build/app/outputs/apk/release/app-x86_64-release.apk
-            ${{ github.workspace }}/build/app/outputs/bundle/release/app-release.aab
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/bundle/release/app-release.aab
           name: SSApp ${{ github.ref_name }}
           body: |
             ### Для установки (APK)
             - **arm64-v8a** — все современные устройства (2017+), выбирай этот если не знаешь какой
             - **armeabi-v7a** — старые 32-bit устройства
             - **x86_64** — эмуляторы и Chromebook
+            - **universal** — работает на всех, но весит больше
 
             ### Для магазинов (AAB)
             - **app-release.aab** — загружать в Рустор / Google Play
