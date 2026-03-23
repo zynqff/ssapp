@@ -43,23 +43,31 @@ jobs:
           rm -rf android/app/src/main/res/mipmap-xxxhdpi
           dart run flutter_launcher_icons
 
+      - name: Create gradlew
+        run: |
+          ls android/gradlew 2>/dev/null || (cd android && gradle wrapper --gradle-version 8.11.1)
+          chmod +x android/gradlew
+
       - name: Write local.properties
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
+          DEFINES=$(printf '%s' \
+            "SUPABASE_URL=https://ymnbrazhehyafkkvzpnt.supabase.co," \
+            "SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbmJyYXpoZWh5YWZra3Z6cG50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTk2NDEsImV4cCI6MjA4MzQzNTY0MX0.1Idd7OuDuuz9yDn2g3CzIdpAOWMSe-JGHkwbfkgXJAE," \
+            "GOOGLE_CLIENT_ID=72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com")
+          B64=$(echo -n "$DEFINES" | base64 -w 0)
+          echo "dart.defines=$B64" >> android/local.properties
 
       - name: Decode keystore
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
-      - name: Build APK
+      - name: Build APK (split by ABI)
         run: |
-          flutter build apk --release \
-            --no-android-gradle-daemon \
-            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          cd android
+          ./gradlew assembleRelease -PsplitApk=true -PshrinkRes=true
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -68,11 +76,8 @@ jobs:
 
       - name: Build AAB
         run: |
-          flutter build appbundle --release \
-            --no-android-gradle-daemon \
-            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
+          cd android
+          ./gradlew bundleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -83,12 +88,18 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ github.workspace }}/build/app/outputs/apk/release/app-release.apk
-            ${{ github.workspace }}/build/app/outputs/bundle/release/app-release.aab
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/bundle/release/app-release.aab
           name: SSApp ${{ github.ref_name }}
           body: |
-            ### Для установки
-            - **app-release.apk** — универсальный, работает на всех устройствах
+            ### Для установки (APK)
+            - **arm64-v8a** — все современные устройства (2017+), выбирай этот если не знаешь какой
+            - **armeabi-v7a** — старые 32-bit устройства
+            - **x86_64** — эмуляторы и Chromebook
+            - **universal** — работает на всех, но весит больше
 
             ### Для магазинов (AAB)
             - **app-release.aab** — загружать в Рустор / Google Play
