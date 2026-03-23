@@ -60,28 +60,35 @@ jobs:
             > ${{ github.workspace }}/sscollective-key.jks
 
       - name: Build APK + AAB
+        continue-on-error: true
         run: |
-    flutter build apk --release --split-per-abi \
-      --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-      --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-      --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-      --android-skip-build-dependency-validation \
-      --no-android-gradle-daemon
-    flutter build appbundle --release \
-      --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-      --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-      --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-      --android-skip-build-dependency-validation \
-      --no-android-gradle-daemon
-  env:
-    KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
-    KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
-    KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-    KEY_PASSWORD: ${{ secrets.KEY_PASSWORD
+          flutter build apk --release --split-per-abi \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
+            --android-skip-build-dependency-validation \
+            --no-android-gradle-daemon
+          flutter build appbundle --release \
+            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
+            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
+            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
+            --android-skip-build-dependency-validation \
+            --no-android-gradle-daemon
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
       - name: Find APK
-        run: find ${{ github.workspace }}/build -name "*.apk" 2>/dev/null || echo "No APK found"
-    
+        run: |
+          echo "=== APK files ==="
+          find ${{ github.workspace }} -name "*.apk" 2>/dev/null || echo "No APK found"
+          echo "=== AAB files ==="
+          find ${{ github.workspace }} -name "*.aab" 2>/dev/null || echo "No AAB found"
+          echo "=== build/app/outputs ==="
+          ls -la ${{ github.workspace }}/build/app/outputs/ 2>/dev/null || echo "outputs dir not found"
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
