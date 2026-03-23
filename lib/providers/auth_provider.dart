@@ -29,12 +29,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   );
 
   Future<void> _init() async {
+    // onAuthStateChange нужен только для Google (триггер там создаёт запись)
     _supabase.auth.onAuthStateChange.listen((data) async {
       final session = data.session;
       if (session == null) {
         state = const AsyncValue.data(null);
       } else {
-        await _loadUser(session.user.id, isFirstTime: true);
+        // Для Google грузим с retry — триггер может не успеть
+        await _loadUserWithRetry(session.user.id);
       }
     });
 
@@ -57,7 +59,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       }
     }
 
-    await _loadUser(session.user.id, isFirstTime: true);
+    await _loadUserWithRetry(session.user.id);
   }
 
   Future<User?> _fetchUserRow(String uid) async {
@@ -73,8 +75,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Пробуем несколько раз — триггер может не успеть создать запись
-  Future<void> _loadUser(String uid, {bool isFirstTime = false}) async {
+  // Retry нужен только для Google — триггер может не успеть создать запись
+  Future<void> _loadUserWithRetry(String uid) async {
     for (int i = 0; i < 5; i++) {
       final user = await _fetchUserRow(uid);
       if (user != null) {
@@ -85,11 +87,28 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       }
       await Future.delayed(const Duration(milliseconds: 600));
     }
-    if (mounted && isFirstTime) {
+    if (mounted) {
       state = AsyncValue.error(
         'Ошибка загрузки профиля. Проверьте интернет.',
         StackTrace.current,
       );
+    }
+  }
+
+  // Простая загрузка без retry — для обычного входа/регистрации (запись уже точно есть)
+  Future<void> _loadUserDirect(String uid) async {
+    final user = await _fetchUserRow(uid);
+    if (user != null) {
+      await _db.setReadPoems(user.username, user.readPoems);
+      if (mounted) state = AsyncValue.data(user);
+      _backgroundSync(user.username);
+    } else {
+      if (mounted) {
+        state = AsyncValue.error(
+          'Профиль не найден. Обратитесь в поддержку.',
+          StackTrace.current,
+        );
+      }
     }
   }
 
@@ -134,7 +153,13 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         return 'Пользователь не найден';
       }
 
-      await _supabase.auth.signInWithPassword(email: email, password: password);
+      final res = await _supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      // Запись в public.user точно есть — грузим без retry
+      await _loadUserDirect(res.user!.id);
       return null;
     } on AuthException catch (e) {
       state = const AsyncValue.data(null);
@@ -164,6 +189,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<String?> register(String email, String password, String username) async {
     if (password.length < 8) return 'Пароль не менее 8 символов';
     try {
+      // Проверяем уникальность username
       final existing = await _supabase
           .from('user')
           .select('username')
@@ -171,6 +197,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           .limit(1);
       if (existing.isNotEmpty) return 'Имя пользователя уже занято';
 
+      // Регистрируем в Supabase Auth
       final res = await _supabase.auth.signUp(
         email: email,
         password: password,
@@ -179,16 +206,34 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
       if (res.user == null) return 'Ошибка регистрации';
 
-      // onAuthStateChange подхватит сессию и вызовет _loadUser с retry
+      // Email confirmation включён — сессии нет, просим подтвердить
+      if (res.session == null) {
+        return 'confirm_email:$email';
+      }
+
+      // Вставляем запись в public.user сами — без триггера
+      await _supabase.from('user').insert({
+        'supabase_uid': res.user!.id,
+        'username': username,
+        'email': email,
+        'is_admin': false,
+        'read_poems_json': [],
+        'show_all_tab': false,
+        'user_data': '',
+      });
+
+      // Грузим юзера напрямую — запись только что создали сами
+      await _loadUserDirect(res.user!.id);
       return null;
     } on AuthException catch (e) {
       return e.message;
-    } catch (_) {
-      return 'Ошибка регистрации';
+    } catch (e) {
+      return 'Ошибка регистрации: $e';
     }
   }
 
   // ── Google ─────────────────────────────────────────────────────────────────
+  // Google оставляем через триггер — username там не передать
 
   Future<String?> loginWithGoogle() async {
     try {
@@ -204,6 +249,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         accessToken: auth.accessToken,
       );
 
+      // onAuthStateChange сам вызовет _loadUserWithRetry
       return null;
     } on AuthException catch (e) {
       return e.message;
