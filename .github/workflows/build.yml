@@ -74,6 +74,9 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
+      - name: Stop Gradle daemon
+        run: cd android && ./gradlew --stop
+
       - name: Build AAB
         run: |
           cd android
