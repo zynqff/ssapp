@@ -21,12 +21,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final _sync = SyncService();
 
   final _googleSignIn = GoogleSignIn(
-  scopes: ['email'],
-  serverClientId: const String.fromEnvironment(
-    'GOOGLE_CLIENT_ID',
-    defaultValue: '72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com',
-  ),
-);
+    scopes: ['email'],
+    serverClientId: const String.fromEnvironment(
+      'GOOGLE_CLIENT_ID',
+      defaultValue: '72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com',
+    ),
+  );
 
   Future<void> _init() async {
     _supabase.auth.onAuthStateChange.listen((data) async {
@@ -34,7 +34,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       if (session == null) {
         state = const AsyncValue.data(null);
       } else {
-        await _loadUser(session.user.id, isFirstTime: false);
+        await _loadUser(session.user.id, isFirstTime: true);
       }
     });
 
@@ -73,19 +73,23 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
+  // Пробуем несколько раз — триггер может не успеть создать запись
   Future<void> _loadUser(String uid, {bool isFirstTime = false}) async {
-    final user = await _fetchUserRow(uid);
-    if (user != null) {
-      await _db.setReadPoems(user.username, user.readPoems);
-      if (mounted) state = AsyncValue.data(user);
-      _backgroundSync(user.username);
-    } else if (isFirstTime) {
-      if (mounted) {
-        state = AsyncValue.error(
-          'Ошибка загрузки профиля. Проверьте интернет.',
-          StackTrace.current,
-        );
+    for (int i = 0; i < 5; i++) {
+      final user = await _fetchUserRow(uid);
+      if (user != null) {
+        await _db.setReadPoems(user.username, user.readPoems);
+        if (mounted) state = AsyncValue.data(user);
+        _backgroundSync(user.username);
+        return;
       }
+      await Future.delayed(const Duration(milliseconds: 600));
+    }
+    if (mounted && isFirstTime) {
+      state = AsyncValue.error(
+        'Ошибка загрузки профиля. Проверьте интернет.',
+        StackTrace.current,
+      );
     }
   }
 
@@ -167,19 +171,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           .limit(1);
       if (existing.isNotEmpty) return 'Имя пользователя уже занято';
 
-      await _supabase.auth.signUp(
+      final res = await _supabase.auth.signUp(
         email: email,
         password: password,
         data: {'username': username},
       );
 
-      // Триггер создаёт запись в user — даём ему время
-      await Future.delayed(const Duration(milliseconds: 500));
-      await _supabase
-          .from('user')
-          .update({'email': email})
-          .eq('username', username);
+      if (res.user == null) return 'Ошибка регистрации';
 
+      // onAuthStateChange подхватит сессию и вызовет _loadUser с retry
       return null;
     } on AuthException catch (e) {
       return e.message;
@@ -203,18 +203,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         idToken: idToken,
         accessToken: auth.accessToken,
       );
-
-      final session = _supabase.auth.currentSession;
-      if (session != null) {
-        final email = session.user.email;
-        if (email != null) {
-          await _supabase
-              .from('user')
-              .update({'email': email})
-              .eq('supabase_uid', session.user.id)
-              .isFilter('email', null);
-        }
-      }
 
       return null;
     } on AuthException catch (e) {
