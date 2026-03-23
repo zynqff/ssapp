@@ -64,10 +64,20 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
-      - name: Build APK + AAB
+      - name: Build APK (split by ABI)
         run: |
           cd android
-          ./gradlew assembleRelease bundleRelease
+          ./gradlew assembleRelease
+        env:
+          KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
+          KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+
+      - name: Build AAB
+        run: |
+          cd android
+          ./gradlew bundleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
