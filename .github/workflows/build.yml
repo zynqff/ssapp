@@ -45,6 +45,9 @@ jobs:
       - name: Decode keystore
         run: echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/sscollective-key.jks
 
+      - name: Generate gradlew
+        run: cd android && gradle wrapper --gradle-version 8.11.1
+
       - name: Build
         run: |
           chmod +x android/gradlew
