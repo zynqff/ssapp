@@ -44,9 +44,7 @@ android {
         release {
             signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
-            // isShrinkResources конфликтует с bundleRelease когда включены splits.
-            // Отключаем через Gradle property: передай -PshrinkRes=true только для APK.
-            isShrinkResources = project.findProperty("shrinkRes") == "true"
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -57,17 +55,7 @@ android {
         }
     }
 
-    // --- СПЛИТ APK ПО АРХИТЕКТУРЕ ---
-    // splits работают только для APK, для bundle они игнорируются,
-    // но их наличие вместе с isShrinkResources вызывает краш R8.
-    splits {
-        abi {
-            isEnable = project.findProperty("splitApk") == "true"
-            reset()
-            include("arm64-v8a", "armeabi-v7a", "x86_64")
-            isUniversalApk = true
-        }
-    }
+    // splits убраны — Flutter CLI сам управляет разбивкой через --split-per-abi
 }
 
 flutter {
