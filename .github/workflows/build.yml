@@ -52,6 +52,12 @@ jobs:
         run: |
           echo "sdk.dir=$ANDROID_SDK_ROOT" > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
+          DEFINES=$(printf '%s' \
+            "SUPABASE_URL=${{ secrets.SUPABASE_URL }}," \
+            "SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }}," \
+            "GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}")
+          B64=$(echo -n "$DEFINES" | base64 -w 0)
+          echo "dart.defines=$B64" >> android/local.properties
 
       - name: Decode keystore
         run: |
@@ -60,16 +66,8 @@ jobs:
 
       - name: Build APK + AAB
         run: |
-          flutter build apk --release --split-per-abi \
-            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-            -- --stacktrace
-          flutter build appbundle --release \
-            --dart-define=SUPABASE_URL=${{ secrets.SUPABASE_URL }} \
-            --dart-define=SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }} \
-            --dart-define=GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }} \
-            -- --stacktrace
+          cd android
+          ./gradlew assembleRelease bundleRelease
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
@@ -80,11 +78,11 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            ${{ github.workspace }}/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            ${{ github.workspace }}/build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            ${{ github.workspace }}/build/app/outputs/flutter-apk/app-x86_64-release.apk
-            ${{ github.workspace }}/build/app/outputs/flutter-apk/app-release.apk
-            ${{ github.workspace }}/build/app/outputs/bundle/release/app-release.aab
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-arm64-v8a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-armeabi-v7a-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-x86_64-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/apk/release/app-universal-release.apk
+            ${{ github.workspace }}/android/app/build/outputs/bundle/release/app-release.aab
           name: SSApp ${{ github.ref_name }}
           body: |
             ### Для установки (APK)
