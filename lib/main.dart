@@ -16,11 +16,17 @@ const String kAppVersion = '1.0.2';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await Supabase.initialize(
-    url: const String.fromEnvironment('SUPABASE_URL'),
-    anonKey: const String.fromEnvironment('SUPABASE_ANON_KEY'),
-  );
-
+await Supabase.initialize(
+  url: const String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://ymnbrazhehyafkkvzpnt.supabase.co',
+  ),
+  anonKey: const String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbmJyYXpoZWh5YWZra3Z6cG50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTk2NDEsImV4cCI6MjA4MzQzNTY0MX0.1Idd7OuDuuz9yDn2g3CzIdpAOWMSe-JGHkwbfkgXJAE',
+  ),
+);
+  
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
