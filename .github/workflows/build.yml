@@ -56,7 +56,8 @@ jobs:
       - name: Build APK + AAB
         run: |
           cd android
-          ./gradlew assembleRelease bundleRelease
+          ./gradlew assembleRelease bundleRelease \
+            -Pdart-defines="SUPABASE_URL=${{ secrets.SUPABASE_URL }},SUPABASE_ANON_KEY=${{ secrets.SUPABASE_ANON_KEY }},GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}"
         env:
           KEYSTORE_PATH: ${{ github.workspace }}/sscollective-key.jks
           KEYSTORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
