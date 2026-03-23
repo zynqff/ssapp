@@ -17,18 +17,15 @@ class LoginScreen extends ConsumerStatefulWidget {
 class _LoginScreenState extends ConsumerState<LoginScreen> {
   late bool _isRegister;
 
-  // Вход: username или email
   final _loginCtrl    = TextEditingController();
-  // Регистрация: отдельные поля
   final _emailCtrl    = TextEditingController();
   final _usernameCtrl = TextEditingController();
-  // Общее
   final _passCtrl     = TextEditingController();
 
   bool _obscure = true;
   bool _loading = false;
   String? _error;
-  String? _info; // не-ошибочные сообщения (подтверждение email и т.п.)
+  String? _info;
 
   @override
   void initState() {
@@ -61,15 +58,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       if (!mounted) return;
 
       if (result == null) {
-        // Успех — authProvider сам переключит экран
         setState(() => _loading = false);
       } else if (result.startsWith('confirm_email:')) {
-        // Email confirmation включён
         final sentTo = result.substring('confirm_email:'.length);
         setState(() {
           _loading = false;
           _info = 'Письмо отправлено на $sentTo. Подтвердите email и войдите.';
-          _isRegister = false; // переключаем на форму входа
+          _isRegister = false;
         });
       } else {
         setState(() { _loading = false; _error = result; });
@@ -90,6 +85,13 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     setState(() { _loading = true; _error = null; _info = null; });
     final error = await ref.read(authProvider.notifier).loginWithGoogle();
     if (mounted) setState(() { _loading = false; _error = error; });
+  }
+
+  void _openForgotPassword() {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const ForgotPasswordScreen()),
+    );
   }
 
   @override
@@ -115,7 +117,6 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
               children: [
                 const SizedBox(height: 32),
 
-                // Icon
                 Container(
                   width: 80,
                   height: 80,
@@ -183,7 +184,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 12),
                 ],
 
-                // ── Пароль (всегда) ─────────────────────────────────────────
+                // ── Пароль ──────────────────────────────────────────────────
                 _StyledField(
                   controller: _passCtrl,
                   label: 'Пароль',
@@ -203,7 +204,31 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ),
 
-                // Info (напр. подтверждение email)
+                // ── Забыли пароль? (только на форме входа) ─────────────────
+                if (!_isRegister) ...[
+                  const SizedBox(height: 6),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: TextButton(
+                      onPressed: _openForgotPassword,
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 4, vertical: 4),
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: Text(
+                        'Забыли пароль?',
+                        style: GoogleFonts.notoSerif(
+                          color: cs.onSurfaceVariant,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
+                // ── Info ────────────────────────────────────────────────────
                 if (_info != null) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -231,7 +256,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   ),
                 ],
 
-                // Error
+                // ── Error ───────────────────────────────────────────────────
                 if (_error != null) ...[
                   const SizedBox(height: 12),
                   Container(
@@ -260,7 +285,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
                 const SizedBox(height: 24),
 
-                // Submit button
+                // ── Кнопка входа/регистрации ────────────────────────────────
                 SizedBox(
                   width: double.infinity,
                   height: 50,
@@ -283,7 +308,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ),
                 const SizedBox(height: 16),
 
-                // Google button
+                // ── Google ──────────────────────────────────────────────────
                 if (googleEnabled) ...[
                   Row(children: [
                     Expanded(
@@ -319,7 +344,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                   const SizedBox(height: 20),
                 ],
 
-                // Toggle register/login
+                // ── Переключение вход/регистрация ───────────────────────────
                 if (registrationEnabled) ...[
                   TextButton(
                     onPressed: () => setState(() {
@@ -338,7 +363,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
                 const SizedBox(height: 8),
 
-                // Privacy policy
+                // ── Политика конфиденциальности ─────────────────────────────
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8),
                   child: RichText(
@@ -385,6 +410,251 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     );
   }
 }
+
+// ── Экран сброса пароля ────────────────────────────────────────────────────
+
+class ForgotPasswordScreen extends ConsumerStatefulWidget {
+  const ForgotPasswordScreen({super.key});
+
+  @override
+  ConsumerState<ForgotPasswordScreen> createState() =>
+      _ForgotPasswordScreenState();
+}
+
+class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
+  final _emailCtrl = TextEditingController();
+  bool _loading = false;
+  bool _sent = false;
+  String? _error;
+
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'Введите email');
+      return;
+    }
+
+    setState(() { _loading = true; _error = null; });
+    final error = await ref.read(authProvider.notifier).resetPassword(email);
+    if (!mounted) return;
+
+    if (error == null) {
+      setState(() { _loading = false; _sent = true; });
+    } else {
+      setState(() { _loading = false; _error = error; });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
+    return Scaffold(
+      appBar: AppBar(
+        leading: IconButton(
+          icon: Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: cs.surfaceVariant,
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cs.outline, width: 0.8),
+            ),
+            child: Icon(Icons.arrow_back_rounded,
+                color: cs.onSurface, size: 18),
+          ),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Text(
+          'Сброс пароля',
+          style: GoogleFonts.playfairDisplay(
+            color: cs.onSurface,
+            fontSize: 18,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+      ),
+      body: SafeArea(
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 28),
+            child: _sent ? _buildSuccess(cs) : _buildForm(cs),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildForm(ColorScheme cs) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 16),
+
+        // Иконка
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: cs.primary.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: cs.primary.withOpacity(0.3),
+              width: 1.2,
+            ),
+          ),
+          child: Icon(Icons.lock_reset_rounded, size: 34, color: cs.primary),
+        ),
+        const SizedBox(height: 20),
+
+        Text(
+          'Забыли пароль?',
+          style: GoogleFonts.playfairDisplay(
+            color: cs.onSurface,
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Введите email, на который зарегистрирован аккаунт.\nМы отправим ссылку для сброса пароля.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.notoSerif(
+            color: cs.onSurfaceVariant,
+            fontSize: 13.5,
+            height: 1.6,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(height: 32),
+
+        _StyledField(
+          controller: _emailCtrl,
+          label: 'Email',
+          icon: Icons.email_outlined,
+          action: TextInputAction.done,
+          keyboardType: TextInputType.emailAddress,
+          onSubmitted: (_) => _submit(),
+        ),
+
+        // Error
+        if (_error != null) ...[
+          const SizedBox(height: 12),
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: cs.error.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+              border:
+                  Border.all(color: cs.error.withOpacity(0.3), width: 0.8),
+            ),
+            child: Row(children: [
+              Icon(Icons.error_outline_rounded,
+                  color: cs.error, size: 16),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _error!,
+                  style: GoogleFonts.notoSerif(
+                      color: cs.error, fontSize: 13),
+                ),
+              ),
+            ]),
+          ),
+        ],
+        const SizedBox(height: 24),
+
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: FilledButton(
+            onPressed: _loading ? null : _submit,
+            child: _loading
+                ? SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(
+                        strokeWidth: 2, color: cs.onPrimary),
+                  )
+                : Text(
+                    'Отправить письмо',
+                    style: GoogleFonts.notoSerif(
+                        fontSize: 15, fontWeight: FontWeight.w600),
+                  ),
+          ),
+        ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+
+  Widget _buildSuccess(ColorScheme cs) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 16),
+        Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            color: cs.primary.withOpacity(0.12),
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: cs.primary.withOpacity(0.3),
+              width: 1.2,
+            ),
+          ),
+          child: Icon(Icons.mark_email_read_outlined,
+              size: 34, color: cs.primary),
+        ),
+        const SizedBox(height: 20),
+        Text(
+          'Письмо отправлено',
+          style: GoogleFonts.playfairDisplay(
+            color: cs.onSurface,
+            fontSize: 24,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 10),
+        Text(
+          'Мы отправили ссылку для сброса пароля на\n${_emailCtrl.text.trim()}\n\nПроверьте папку «Спам», если письмо не пришло.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.notoSerif(
+            color: cs.onSurfaceVariant,
+            fontSize: 13.5,
+            height: 1.6,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(height: 32),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: FilledButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text(
+              'Вернуться ко входу',
+              style: GoogleFonts.notoSerif(
+                  fontSize: 15, fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(height: 32),
+      ],
+    );
+  }
+}
+
+// ── Общий виджет поля ──────────────────────────────────────────────────────
 
 class _StyledField extends StatelessWidget {
   final TextEditingController controller;
