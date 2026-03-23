@@ -43,8 +43,10 @@ jobs:
           rm -rf android/app/src/main/res/mipmap-xxxhdpi
           dart run flutter_launcher_icons
 
-      - name: Make gradlew executable
-        run: chmod +x android/gradlew
+      - name: Create gradlew
+        run: |
+          ls android/gradlew 2>/dev/null || (cd android && gradle wrapper --gradle-version 8.11.1)
+          chmod +x android/gradlew
 
       - name: Decode keystore
         run: |
