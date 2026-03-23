@@ -59,6 +59,9 @@ jobs:
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d \
             > ${{ github.workspace }}/sscollective-key.jks
 
+      - name: Find APK
+        run: find ${{ github.workspace }}/build -name "*.apk" 2>/dev/null || echo "No APK found"
+      
       - name: Build APK + AAB
         run: |
           flutter build apk --release --split-per-abi \
