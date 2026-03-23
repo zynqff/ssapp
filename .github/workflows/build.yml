@@ -46,7 +46,7 @@ jobs:
       - name: Create gradlew
         run: |
           if [ ! -f android/gradlew ]; then
-            curl -s https://services.gradle.org/distributions/gradle-8.11.1-bin.zip \
+            curl -L https://services.gradle.org/distributions/gradle-8.11.1-bin.zip \
               -o /tmp/gradle.zip
             unzip -q /tmp/gradle.zip -d /tmp/
             cd android && /tmp/gradle-8.11.1/bin/gradle wrapper --gradle-version 8.11.1
