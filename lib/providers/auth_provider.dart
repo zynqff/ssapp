@@ -29,13 +29,11 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   );
 
   Future<void> _init() async {
-    // onAuthStateChange нужен только для Google (триггер там создаёт запись)
     _supabase.auth.onAuthStateChange.listen((data) async {
       final session = data.session;
       if (session == null) {
         state = const AsyncValue.data(null);
       } else {
-        // Для Google грузим с retry — триггер может не успеть
         await _loadUserWithRetry(session.user.id);
       }
     });
@@ -75,7 +73,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Retry нужен только для Google — триггер может не успеть создать запись
+  // Retry только для Google — триггер может не успеть создать запись
   Future<void> _loadUserWithRetry(String uid) async {
     for (int i = 0; i < 5; i++) {
       final user = await _fetchUserRow(uid);
@@ -95,20 +93,17 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Простая загрузка без retry — для обычного входа/регистрации (запись уже точно есть)
-  Future<void> _loadUserDirect(String uid) async {
+  // Без retry — для обычного входа/регистрации (запись точно есть)
+  Future<String?> _loadUserDirect(String uid) async {
     final user = await _fetchUserRow(uid);
     if (user != null) {
       await _db.setReadPoems(user.username, user.readPoems);
       if (mounted) state = AsyncValue.data(user);
       _backgroundSync(user.username);
+      return null;
     } else {
-      if (mounted) {
-        state = AsyncValue.error(
-          'Профиль не найден. Обратитесь в поддержку.',
-          StackTrace.current,
-        );
-      }
+      if (mounted) state = const AsyncValue.data(null);
+      return 'Профиль не найден. Обратитесь в поддержку.';
     }
   }
 
@@ -158,16 +153,35 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         password: password,
       );
 
-      // Запись в public.user точно есть — грузим без retry
-      await _loadUserDirect(res.user!.id);
-      return null;
+      // signInWithPassword выбросит AuthException если пароль неверный —
+      // до этой строки дойдём только при успехе
+      final error = await _loadUserDirect(res.user!.id);
+      return error;
     } on AuthException catch (e) {
       state = const AsyncValue.data(null);
-      return e.message;
+      // Supabase возвращает английские сообщения — переводим основные
+      return _translateAuthError(e.message);
     } catch (_) {
       state = const AsyncValue.data(null);
-      return 'Ошибка входа';
+      return 'Ошибка входа. Проверьте интернет.';
     }
+  }
+
+  String _translateAuthError(String message) {
+    final m = message.toLowerCase();
+    if (m.contains('invalid login credentials') || m.contains('invalid credentials')) {
+      return 'Неверный email или пароль';
+    }
+    if (m.contains('email not confirmed')) {
+      return 'Email не подтверждён. Проверьте почту.';
+    }
+    if (m.contains('too many requests')) {
+      return 'Слишком много попыток. Попробуйте позже.';
+    }
+    if (m.contains('user not found')) {
+      return 'Пользователь не найден';
+    }
+    return message;
   }
 
   Future<String?> _findEmailByUsername(String username) async {
@@ -189,7 +203,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   Future<String?> register(String email, String password, String username) async {
     if (password.length < 8) return 'Пароль не менее 8 символов';
     try {
-      // Проверяем уникальность username
       final existing = await _supabase
           .from('user')
           .select('username')
@@ -197,7 +210,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           .limit(1);
       if (existing.isNotEmpty) return 'Имя пользователя уже занято';
 
-      // Регистрируем в Supabase Auth
       final res = await _supabase.auth.signUp(
         email: email,
         password: password,
@@ -206,12 +218,10 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
       if (res.user == null) return 'Ошибка регистрации';
 
-      // Email confirmation включён — сессии нет, просим подтвердить
       if (res.session == null) {
         return 'confirm_email:$email';
       }
 
-      // Вставляем запись в public.user сами — без триггера
       await _supabase.from('user').insert({
         'supabase_uid': res.user!.id,
         'username': username,
@@ -222,18 +232,29 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         'user_data': '',
       });
 
-      // Грузим юзера напрямую — запись только что создали сами
-      await _loadUserDirect(res.user!.id);
-      return null;
+      final error = await _loadUserDirect(res.user!.id);
+      return error;
     } on AuthException catch (e) {
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (e) {
       return 'Ошибка регистрации: $e';
     }
   }
 
+  // ── Сброс пароля ───────────────────────────────────────────────────────────
+
+  Future<String?> resetPassword(String email) async {
+    try {
+      await _supabase.auth.resetPasswordForEmail(email.trim());
+      return null; // успех
+    } on AuthException catch (e) {
+      return _translateAuthError(e.message);
+    } catch (_) {
+      return 'Ошибка отправки. Проверьте интернет.';
+    }
+  }
+
   // ── Google ─────────────────────────────────────────────────────────────────
-  // Google оставляем через триггер — username там не передать
 
   Future<String?> loginWithGoogle() async {
     try {
@@ -249,10 +270,9 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         accessToken: auth.accessToken,
       );
 
-      // onAuthStateChange сам вызовет _loadUserWithRetry
       return null;
     } on AuthException catch (e) {
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (e) {
       return 'Ошибка Google входа: $e';
     }
@@ -352,7 +372,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       ));
       return null;
     } on AuthException catch (e) {
-      return e.message;
+      return _translateAuthError(e.message);
     } catch (_) {
       return 'Ошибка обновления';
     }
