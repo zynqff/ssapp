@@ -23,6 +23,7 @@ dependencies:
   google_sign_in: ^6.2.1
   shared_preferences: ^2.3.2
   supabase_flutter: ^2.8.4
+  url_launcher: ^6.3.0
 
 dev_dependencies:
   flutter_test:
