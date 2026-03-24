@@ -35,7 +35,6 @@ class DatabaseService {
 
   Future<void> _onUpgrade(Database db, int oldV, int newV) async {
     if (oldV < 2) {
-      // Миграция: пересоздаём таблицы с id вместо title
       await db.execute('DROP TABLE IF EXISTS read_poems');
       await db.execute('DROP TABLE IF EXISTS pinned_poem');
       await db.execute('''CREATE TABLE read_poems(
@@ -43,7 +42,6 @@ class DatabaseService {
         PRIMARY KEY(username, poem_id))''');
       await db.execute('''CREATE TABLE pinned_poem(
         username TEXT PRIMARY KEY, poem_id INTEGER)''');
-      // poems тоже пересоздаём чтобы добавить id как PRIMARY KEY
       await db.execute('DROP TABLE IF EXISTS poems');
       await db.execute('''CREATE TABLE poems(
         id INTEGER PRIMARY KEY, title TEXT NOT NULL, author TEXT NOT NULL,
@@ -162,4 +160,43 @@ class DatabaseService {
 
   Future<void> removeSyncQueueItem(int id) async =>
       (await db).delete('sync_queue', where: 'id=?', whereArgs: [id]);
+
+  // ─── Миграция username ────────────────────────────────────────────────────
+  /// Переносит все локальные данные (прочитанные стихи, закреплённое,
+  /// историю чата) с [oldUsername] на [newUsername].
+  /// Вызывается после успешной смены никнейма на сервере.
+  Future<void> migrateUsername(String oldUsername, String newUsername) async {
+    final d = await db;
+
+    await d.transaction((txn) async {
+      // ── read_poems ────────────────────────────────────────────────────────
+      // Удаляем возможные конфликты под новым именем, затем переименовываем
+      await txn.delete('read_poems',
+          where: 'username=?', whereArgs: [newUsername]);
+      await txn.rawUpdate(
+        'UPDATE read_poems SET username=? WHERE username=?',
+        [newUsername, oldUsername],
+      );
+
+      // ── pinned_poem ───────────────────────────────────────────────────────
+      final pinned = await txn.query('pinned_poem',
+          where: 'username=?', whereArgs: [oldUsername]);
+      if (pinned.isNotEmpty) {
+        final poemId = pinned.first['poem_id'];
+        await txn.delete('pinned_poem',
+            where: 'username=?', whereArgs: [oldUsername]);
+        await txn.delete('pinned_poem',
+            where: 'username=?', whereArgs: [newUsername]);
+        await txn.insert('pinned_poem',
+            {'username': newUsername, 'poem_id': poemId},
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+
+      // ── chat_history ──────────────────────────────────────────────────────
+      await txn.rawUpdate(
+        'UPDATE chat_history SET username=? WHERE username=?',
+        [newUsername, oldUsername],
+      );
+    });
+  }
 }
