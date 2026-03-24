@@ -340,4 +340,121 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       return 'Ошибка обновления';
     }
   }
+
+  // ── Смена никнейма ─────────────────────────────────────────────────────────
+
+  Future<String?> changeUsername(String newUsername) async {
+    final user = state.value;
+    if (user == null) return 'Не авторизован';
+
+    final trimmed = newUsername.trim();
+    if (trimmed.isEmpty) return 'Никнейм не может быть пустым';
+    if (trimmed.length < 2) return 'Никнейм слишком короткий';
+    if (trimmed == user.username) return 'Это уже ваш никнейм';
+
+    try {
+      // Проверяем что никнейм свободен
+      final existing = await _supabase
+          .from('user')
+          .select('username')
+          .eq('username', trimmed)
+          .limit(1);
+      if ((existing as List).isNotEmpty) return 'Этот никнейм уже занят';
+
+      final uid = _supabase.auth.currentUser!.id;
+
+      // Обновляем в таблице user
+      await _supabase
+          .from('user')
+          .update({'username': trimmed})
+          .eq('supabase_uid', uid);
+
+      // Обновляем в Supabase Auth user_metadata (на всякий случай)
+      await _supabase.auth.updateUser(
+        UserAttributes(data: {'username': trimmed}),
+      );
+
+      // Обновляем локальное состояние
+      state = AsyncValue.data(User(
+        username: trimmed,
+        isAdmin: user.isAdmin,
+        readPoems: user.readPoems,
+        pinnedPoemId: user.pinnedPoemId,
+        showAllTab: user.showAllTab,
+        userData: user.userData,
+      ));
+
+      return null;
+    } on AuthException catch (e) {
+      return _translateAuthError(e.message);
+    } catch (_) {
+      return 'Ошибка смены никнейма';
+    }
+  }
+
+  // ── Смена email (3 шага) ───────────────────────────────────────────────────
+
+  // Шаг 1: запрашиваем смену — Supabase пришлёт OTP на текущий email
+  Future<String?> requestEmailChange(String newEmail) async {
+    if (state.value == null) return 'Не авторизован';
+    try {
+      await _supabase.auth.updateUser(
+        UserAttributes(email: newEmail.trim()),
+      );
+      return null;
+    } on AuthException catch (e) {
+      return _translateAuthError(e.message);
+    } catch (_) {
+      return 'Ошибка отправки кода';
+    }
+  }
+
+  // Шаг 2: подтверждаем код со старого email
+  // Supabase при updateUser(email) сам управляет OTP потоком —
+  // пользователь просто вводит код, который пришёл на старый email,
+  // затем Supabase автоматически шлёт код на новый.
+  // Мы верифицируем его через verifyOTP с типом emailChange.
+  Future<String?> confirmOldEmailCode(String token) async {
+    final currentEmail = _supabase.auth.currentUser?.email;
+    if (currentEmail == null) return 'Не авторизован';
+    try {
+      await _supabase.auth.verifyOTP(
+        email: currentEmail,
+        token: token.trim(),
+        type: OtpType.emailChange,
+      );
+      return null;
+    } on AuthException catch (e) {
+      return _translateAuthError(e.message);
+    } catch (_) {
+      return 'Ошибка подтверждения кода';
+    }
+  }
+
+  // Шаг 3: подтверждаем код с нового email и обновляем таблицу user
+  Future<String?> confirmNewEmailCode(String newEmail, String token) async {
+    try {
+      final res = await _supabase.auth.verifyOTP(
+        email: newEmail.trim(),
+        token: token.trim(),
+        type: OtpType.emailChange,
+      );
+
+      if (res.user == null) return 'Не удалось подтвердить код';
+
+      final uid = res.user!.id;
+
+      // Обновляем email в таблице user
+      await _supabase
+          .from('user')
+          .update({'email': newEmail.trim()})
+          .eq('supabase_uid', uid);
+
+      return null;
+    } on AuthException catch (e) {
+      return _translateAuthError(e.message);
+    } catch (_) {
+      return 'Ошибка подтверждения кода';
+    }
+  }
 }
