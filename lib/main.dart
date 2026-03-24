@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -379,8 +380,11 @@ class _ForceUpdateScreen extends StatelessWidget {
               ),
               const SizedBox(height: 28),
               FilledButton.icon(
-                onPressed: () {
-                  // TODO: открыть ссылку на RuStore
+                onPressed: () async {
+                  final uri = Uri.parse(
+                    'https://www.rustore.ru/catalog/app/com.sscollective.app',
+                  );
+                  if (await canLaunchUrl(uri)) await launchUrl(uri);
                 },
                 icon: const Icon(Icons.download_rounded),
                 label: Text(
