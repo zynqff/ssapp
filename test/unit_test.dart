@@ -165,17 +165,12 @@ void main() {
     test('переносит read_poems на новый username', () async {
       final db = DatabaseService();
 
-      // Записываем прочитанные стихи под старым именем
       await db.setReadPoems('old_user', [1, 2, 3]);
-
-      // Мигрируем
       await db.migrateUsername('old_user', 'new_user');
 
-      // Под новым именем должны быть те же стихи
       final newReads = await db.getReadPoems('new_user');
       expect(newReads, containsAll([1, 2, 3]));
 
-      // Под старым именем не должно остаться ничего
       final oldReads = await db.getReadPoems('old_user');
       expect(oldReads, isEmpty);
     });
@@ -183,21 +178,20 @@ void main() {
     test('переносит pinned_poem на новый username', () async {
       final db = DatabaseService();
 
-      await db.togglePinnedPoem('old_user', 42);
-      await db.migrateUsername('old_user', 'new_user');
+      await db.togglePinnedPoem('old_user2', 42);
+      await db.migrateUsername('old_user2', 'new_user2');
 
-      final pinned = await db.getPinnedPoem('new_user');
+      final pinned = await db.getPinnedPoem('new_user2');
       expect(pinned, equals(42));
 
-      final oldPinned = await db.getPinnedPoem('old_user');
+      final oldPinned = await db.getPinnedPoem('old_user2');
       expect(oldPinned, isNull);
     });
 
     test('не падает если у старого username нет данных', () async {
       final db = DatabaseService();
-      // Просто не должно бросить исключение
       expect(
-        () => db.migrateUsername('ghost_user', 'new_user'),
+        () => db.migrateUsername('ghost_user', 'new_user3'),
         returnsNormally,
       );
     });
@@ -205,12 +199,13 @@ void main() {
     test('не дублирует данные при повторном вызове', () async {
       final db = DatabaseService();
 
-      await db.setReadPoems('user_a', [10, 20]);
-      await db.migrateUsername('user_a', 'user_b');
+      // Используем уникальные имена, не пересекающиеся с предыдущими тестами
+      await db.setReadPoems('user_a2', [10, 20]);
+      await db.migrateUsername('user_a2', 'user_b2');
       // Второй вызов не должен упасть и не должен задублировать
-      await db.migrateUsername('user_a', 'user_b');
+      await db.migrateUsername('user_a2', 'user_b2');
 
-      final reads = await db.getReadPoems('user_b');
+      final reads = await db.getReadPoems('user_b2');
       expect(reads.where((id) => id == 10).length, equals(1)); // без дублей
     });
   });
