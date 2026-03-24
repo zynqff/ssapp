@@ -15,7 +15,6 @@ class ProfileScreen extends ConsumerStatefulWidget {
 }
 
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
-  final _passCtrl = TextEditingController();
   final _bioCtrl = TextEditingController();
   final _keyCtrl = TextEditingController();
   bool _loading = false;
@@ -24,7 +23,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
 
   @override
   void dispose() {
-    _passCtrl.dispose();
     _bioCtrl.dispose();
     _keyCtrl.dispose();
     super.dispose();
@@ -33,7 +31,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _save(bool currentShowAllTab) async {
     setState(() { _loading = true; _error = null; _success = null; });
     final err = await ref.read(authProvider.notifier).updateProfile(
-      newPassword: _passCtrl.text.isNotEmpty ? _passCtrl.text : null,
       userData: _bioCtrl.text,
       showAllTab: currentShowAllTab,
     );
@@ -41,7 +38,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _loading = false;
       _error = err;
       _success = err == null ? 'Сохранено!' : null;
-      if (err == null) _passCtrl.clear();
     });
   }
 
@@ -214,13 +210,6 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                   children: [
                     _SectionTitle('Настройки аккаунта'),
                     const SizedBox(height: 14),
-                    _ProfileField(
-                      controller: _passCtrl,
-                      label: 'Новый пароль',
-                      icon: Icons.lock_outline_rounded,
-                      obscure: true,
-                    ),
-                    const SizedBox(height: 10),
                     _ProfileField(
                       controller: _bioCtrl,
                       label: 'О себе',
