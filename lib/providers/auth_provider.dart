@@ -134,15 +134,12 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
   // ── OTP: отправить код ─────────────────────────────────────────────────────
 
-  /// Для входа — просто отправляем OTP на email.
-  /// Для регистрации — передаём [username], он сохраняется в data
-  /// и используется после верификации.
   Future<String?> sendOtp(String email, {String? username}) async {
     try {
       await _supabase.auth.signInWithOtp(
         email: email.trim(),
         data: username != null ? {'username': username} : null,
-        shouldCreateUser: username != null, // регистрация создаёт нового юзера
+        shouldCreateUser: username != null,
       );
       return null;
     } on AuthException catch (e) {
@@ -152,8 +149,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  /// Верифицируем 6-значный код.
-  /// Если это регистрация ([username] передан) — создаём запись в таблице user.
   Future<String?> verifyOtp(String email, String token, {String? username}) async {
     state = const AsyncValue.loading();
     try {
@@ -170,7 +165,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
 
       final uid = res.user!.id;
 
-      // Регистрация: создаём запись в user если её ещё нет
       if (username != null) {
         final existing = await _fetchUserRow(uid);
         if (existing == null) {
@@ -341,7 +335,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // ── Смена никнейма ─────────────────────────────────────────────────────────
+  // ── Смена никнейма с миграцией локальных данных ────────────────────────────
 
   Future<String?> changeUsername(String newUsername) async {
     final user = state.value;
@@ -362,6 +356,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       if ((existing as List).isNotEmpty) return 'Этот никнейм уже занят';
 
       final uid = _supabase.auth.currentUser!.id;
+      final oldUsername = user.username;
 
       // Обновляем в таблице user
       await _supabase
@@ -369,10 +364,15 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           .update({'username': trimmed})
           .eq('supabase_uid', uid);
 
-      // Обновляем в Supabase Auth user_metadata (на всякий случай)
+      // Обновляем в Supabase Auth user_metadata
       await _supabase.auth.updateUser(
         UserAttributes(data: {'username': trimmed}),
       );
+
+      // ── Миграция локальных данных SQLite ──────────────────────────────────
+      // Переносим read_poems, pinned_poem и chat_history со старого username
+      // на новый, чтобы история и отметки не потерялись после смены никнейма.
+      await _db.migrateUsername(oldUsername, trimmed);
 
       // Обновляем локальное состояние
       state = AsyncValue.data(User(
@@ -410,10 +410,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   // Шаг 2: подтверждаем код со старого email
-  // Supabase при updateUser(email) сам управляет OTP потоком —
-  // пользователь просто вводит код, который пришёл на старый email,
-  // затем Supabase автоматически шлёт код на новый.
-  // Мы верифицируем его через verifyOTP с типом emailChange.
   Future<String?> confirmOldEmailCode(String token) async {
     final currentEmail = _supabase.auth.currentUser?.email;
     if (currentEmail == null) return 'Не авторизован';
@@ -432,6 +428,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   }
 
   // Шаг 3: подтверждаем код с нового email и обновляем таблицу user
+  // Также обновляем email в локальном кеше (данные по username не затрагиваются,
+  // поэтому отдельная миграция SQLite здесь не нужна).
   Future<String?> confirmNewEmailCode(String newEmail, String token) async {
     try {
       final res = await _supabase.auth.verifyOTP(
@@ -450,6 +448,8 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
           .update({'email': newEmail.trim()})
           .eq('supabase_uid', uid);
 
+      // Email не влияет на ключи локальной БД (там везде username),
+      // поэтому миграция SQLite при смене email не требуется.
       return null;
     } on AuthException catch (e) {
       return _translateAuthError(e.message);
