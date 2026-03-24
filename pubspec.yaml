@@ -1,7 +1,7 @@
 name: ssapp
 description: Сборник Стихов
 publish_to: none
-version: 1.0.2+2
+version: 1.0.4+4
 
 environment:
   sdk: ^3.4.0
