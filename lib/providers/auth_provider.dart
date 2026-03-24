@@ -73,7 +73,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Retry только для Google — триггер может не успеть создать запись
   Future<void> _loadUserWithRetry(String uid) async {
     for (int i = 0; i < 5; i++) {
       final user = await _fetchUserRow(uid);
@@ -93,7 +92,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // Без retry — для обычного входа/регистрации (запись точно есть)
   Future<String?> _loadUserDirect(String uid) async {
     final user = await _fetchUserRow(uid);
     if (user != null) {
@@ -134,62 +132,80 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     } catch (_) {}
   }
 
-  // ── Вход ──────────────────────────────────────────────────────────────────
+  // ── OTP: отправить код ─────────────────────────────────────────────────────
 
-  Future<String?> login(String usernameOrEmail, String password) async {
+  /// Для входа — просто отправляем OTP на email.
+  /// Для регистрации — передаём [username], он сохраняется в data
+  /// и используется после верификации.
+  Future<String?> sendOtp(String email, {String? username}) async {
+    try {
+      await _supabase.auth.signInWithOtp(
+        email: email.trim(),
+        data: username != null ? {'username': username} : null,
+        shouldCreateUser: username != null, // регистрация создаёт нового юзера
+      );
+      return null;
+    } on AuthException catch (e) {
+      return _translateAuthError(e.message);
+    } catch (_) {
+      return 'Ошибка отправки кода. Проверьте интернет.';
+    }
+  }
+
+  /// Верифицируем 6-значный код.
+  /// Если это регистрация ([username] передан) — создаём запись в таблице user.
+  Future<String?> verifyOtp(String email, String token, {String? username}) async {
     state = const AsyncValue.loading();
     try {
-      final email = usernameOrEmail.contains('@')
-          ? usernameOrEmail
-          : await _findEmailByUsername(usernameOrEmail);
-
-      if (email == null) {
-        state = const AsyncValue.data(null);
-        return 'Пользователь не найден';
-      }
-
-      final res = await _supabase.auth.signInWithPassword(
-        email: email,
-        password: password,
+      final res = await _supabase.auth.verifyOTP(
+        email: email.trim(),
+        token: token.trim(),
+        type: OtpType.email,
       );
 
-      // signInWithPassword выбросит AuthException если пароль неверный —
-      // до этой строки дойдём только при успехе
-      final error = await _loadUserDirect(res.user!.id);
+      if (res.user == null) {
+        state = const AsyncValue.data(null);
+        return 'Не удалось подтвердить код';
+      }
+
+      final uid = res.user!.id;
+
+      // Регистрация: создаём запись в user если её ещё нет
+      if (username != null) {
+        final existing = await _fetchUserRow(uid);
+        if (existing == null) {
+          await _supabase.from('user').insert({
+            'supabase_uid': uid,
+            'username': username,
+            'email': email.trim(),
+            'is_admin': false,
+            'read_poems_json': [],
+            'show_all_tab': false,
+            'user_data': '',
+          });
+        }
+      }
+
+      final error = await _loadUserDirect(uid);
       return error;
     } on AuthException catch (e) {
       state = const AsyncValue.data(null);
-      // Supabase возвращает английские сообщения — переводим основные
       return _translateAuthError(e.message);
-    } catch (_) {
+    } catch (e) {
       state = const AsyncValue.data(null);
-      return 'Ошибка входа. Проверьте интернет.';
+      return 'Ошибка подтверждения: $e';
     }
   }
 
-  String _translateAuthError(String message) {
-    final m = message.toLowerCase();
-    if (m.contains('invalid login credentials') || m.contains('invalid credentials')) {
-      return 'Неверный email или пароль';
-    }
-    if (m.contains('email not confirmed')) {
-      return 'Email не подтверждён. Проверьте почту.';
-    }
-    if (m.contains('too many requests')) {
-      return 'Слишком много попыток. Попробуйте позже.';
-    }
-    if (m.contains('user not found')) {
-      return 'Пользователь не найден';
-    }
-    return message;
-  }
+  // ── Резолв username → email ────────────────────────────────────────────────
 
-  Future<String?> _findEmailByUsername(String username) async {
+  Future<String?> resolveEmail(String usernameOrEmail) async {
+    if (usernameOrEmail.contains('@')) return usernameOrEmail.trim();
     try {
       final rows = await _supabase
           .from('user')
           .select('email')
-          .eq('username', username)
+          .eq('username', usernameOrEmail.trim())
           .limit(1);
       if (rows.isEmpty) return null;
       return rows.first['email'] as String?;
@@ -198,60 +214,14 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     }
   }
 
-  // ── Регистрация ────────────────────────────────────────────────────────────
-
-  Future<String?> register(String email, String password, String username) async {
-    if (password.length < 8) return 'Пароль не менее 8 символов';
-    try {
-      final existing = await _supabase
-          .from('user')
-          .select('username')
-          .eq('username', username)
-          .limit(1);
-      if (existing.isNotEmpty) return 'Имя пользователя уже занято';
-
-      final res = await _supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {'username': username},
-      );
-
-      if (res.user == null) return 'Ошибка регистрации';
-
-      if (res.session == null) {
-        return 'confirm_email:$email';
-      }
-
-      await _supabase.from('user').insert({
-        'supabase_uid': res.user!.id,
-        'username': username,
-        'email': email,
-        'is_admin': false,
-        'read_poems_json': [],
-        'show_all_tab': false,
-        'user_data': '',
-      });
-
-      final error = await _loadUserDirect(res.user!.id);
-      return error;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (e) {
-      return 'Ошибка регистрации: $e';
-    }
-  }
-
-  // ── Сброс пароля ───────────────────────────────────────────────────────────
-
-  Future<String?> resetPassword(String email) async {
-    try {
-      await _supabase.auth.resetPasswordForEmail(email.trim());
-      return null; // успех
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (_) {
-      return 'Ошибка отправки. Проверьте интернет.';
-    }
+  String _translateAuthError(String message) {
+    final m = message.toLowerCase();
+    if (m.contains('invalid') && m.contains('otp')) return 'Неверный или истёкший код';
+    if (m.contains('expired')) return 'Код истёк. Запросите новый.';
+    if (m.contains('too many requests')) return 'Слишком много попыток. Попробуйте позже.';
+    if (m.contains('user not found')) return 'Пользователь не найден';
+    if (m.contains('email not confirmed')) return 'Email не подтверждён';
+    return message;
   }
 
   // ── Google ─────────────────────────────────────────────────────────────────
@@ -343,7 +313,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   // ── Обновление профиля ─────────────────────────────────────────────────────
 
   Future<String?> updateProfile({
-    String? newPassword,
     String? userData,
     bool? showAllTab,
   }) async {
@@ -351,10 +320,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     if (user == null) return 'Не авторизован';
 
     try {
-      if (newPassword != null) {
-        await _supabase.auth.updateUser(UserAttributes(password: newPassword));
-      }
-
       final updates = <String, dynamic>{};
       if (userData != null) updates['user_data'] = userData;
       if (showAllTab != null) updates['show_all_tab'] = showAllTab;
@@ -371,8 +336,6 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
         showAllTab: showAllTab ?? user.showAllTab,
       ));
       return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
     } catch (_) {
       return 'Ошибка обновления';
     }
