@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -33,6 +34,9 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
   String _resolvedEmail = ''; // email после резолва username
 
+  int _resendCooldown = 0; // секунды до повторной отправки
+  Timer? _cooldownTimer;
+
   bool _loading = false;
   String? _error;
   String? _info;
@@ -50,7 +54,20 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     _usernameCtrl.dispose();
     _codeCtrl.dispose();
     _codeFocus.dispose();
+    _cooldownTimer?.cancel();
     super.dispose();
+  }
+
+  void _startCooldown() {
+    _resendCooldown = 60;
+    _cooldownTimer?.cancel();
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+      if (!mounted) { t.cancel(); return; }
+      setState(() {
+        _resendCooldown--;
+        if (_resendCooldown <= 0) t.cancel();
+      });
+    });
   }
 
   // ── Шаг 1: отправить OTP ──────────────────────────────────────────────────
@@ -89,6 +106,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       _resolvedEmail = email;
+      _startCooldown();
       setState(() {
         _loading = false;
         _step = _Step.code;
@@ -119,6 +137,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       }
 
       _resolvedEmail = email;
+      _startCooldown();
       setState(() {
         _loading = false;
         _step = _Step.code;
@@ -486,24 +505,41 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
         ),
         const SizedBox(height: 12),
 
-        // Повторная отправка
-        TextButton(
-          onPressed: _loading ? null : () async {
-            setState(() { _loading = true; _error = null; _info = null; });
-            final username = _isRegister ? _usernameCtrl.text.trim() : null;
-            final error = await ref.read(authProvider.notifier)
-                .sendOtp(_resolvedEmail, username: username);
-            if (mounted) setState(() {
-              _loading = false;
-              _error = error;
-              _info = error == null ? 'Новый код отправлен' : null;
-            });
-          },
-          child: Text(
-            'Отправить код повторно',
-            style: GoogleFonts.notoSerif(
-                color: cs.onSurfaceVariant, fontSize: 13),
-          ),
+        // Повторная отправка с таймером
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 200),
+          child: _resendCooldown > 0
+              ? Padding(
+                  key: const ValueKey('countdown'),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  child: Text(
+                    'Повторная отправка через $_resendCooldown сек.',
+                    style: GoogleFonts.notoSerif(
+                        color: cs.onSurfaceVariant, fontSize: 13),
+                  ),
+                )
+              : TextButton(
+                  key: const ValueKey('resend'),
+                  onPressed: _loading ? null : () async {
+                    setState(() { _loading = true; _error = null; _info = null; });
+                    final username = _isRegister ? _usernameCtrl.text.trim() : null;
+                    final error = await ref.read(authProvider.notifier)
+                        .sendOtp(_resolvedEmail, username: username);
+                    if (mounted) {
+                      if (error == null) _startCooldown();
+                      setState(() {
+                        _loading = false;
+                        _error = error;
+                        _info = error == null ? 'Новый код отправлен' : null;
+                      });
+                    }
+                  },
+                  child: Text(
+                    'Отправить код повторно',
+                    style: GoogleFonts.notoSerif(
+                        color: cs.onSurfaceVariant, fontSize: 13),
+                  ),
+                ),
         ),
         const SizedBox(height: 8),
 
