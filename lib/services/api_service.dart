@@ -68,6 +68,7 @@ class ApiService {
   }
 
   // ─── Admin — стихи (через бэкенд, там проверка is_admin) ─────────────────
+  // Все операции используют числовой id, а не title
 
   Future<bool> addPoem(String title, String author, String text) async {
     try {
@@ -79,10 +80,11 @@ class ApiService {
     }
   }
 
+  /// Редактирование по числовому [id] — надёжно даже если title изменился.
   Future<bool> editPoem(
-      String originalTitle, String title, String author, String text) async {
+      int id, String title, String author, String text) async {
     try {
-      final res = await _dio.put('/api/poems/$originalTitle',
+      final res = await _dio.put('/api/poems/$id',
           data: {'title': title, 'author': author, 'text': text});
       return res.data['success'] == true;
     } catch (_) {
@@ -90,9 +92,10 @@ class ApiService {
     }
   }
 
-  Future<bool> deletePoem(String title) async {
+  /// Удаление по числовому [id].
+  Future<bool> deletePoem(int id) async {
     try {
-      final res = await _dio.delete('/api/poems/$title');
+      final res = await _dio.delete('/api/poems/$id');
       return res.data['success'] == true;
     } catch (_) {
       return false;
