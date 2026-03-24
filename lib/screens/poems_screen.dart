@@ -25,6 +25,7 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
   bool _showSearch = false;
   int _selectedTab = 0;
   bool _bannerShown = false;
+  bool? _lastShowAllTab;
 
   @override
   void initState() {
@@ -36,6 +37,22 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
       }
     });
     WidgetsBinding.instance.addPostFrameCallback((_) => _maybeShowBanner());
+  }
+
+  /// Пересоздаёт TabController если showAllTab изменился.
+  void _syncTabs(bool showAll) {
+    if (_lastShowAllTab == showAll) return;
+    _lastShowAllTab = showAll;
+    final tabCount = showAll ? 3 : 2;
+    final newIndex = _selectedTab.clamp(0, tabCount - 1);
+    _tabs.dispose();
+    _tabs = TabController(length: tabCount, vsync: this, initialIndex: newIndex)
+      ..addListener(() {
+        if (_tabs.index != _selectedTab) {
+          setState(() => _selectedTab = _tabs.index);
+        }
+      });
+    _selectedTab = newIndex;
   }
 
   void _maybeShowBanner() {
@@ -295,7 +312,9 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
                     if (isLoggedIn) ...[
                       const SizedBox(height: 14),
                       _PillTabs(
-                        labels: const ['Все', 'Непрочитанные', 'Прочитанные'],
+                        labels: user!.showAllTab
+                            ? const ['Все', 'Непрочитанные', 'Прочитанные']
+                            : const ['Непрочитанные', 'Прочитанные'],
                         selected: _selectedTab,
                         accent: accent,
                         onSelect: (i) {
@@ -326,26 +345,30 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
                   label: const Text('Повторить'),
                 ),
               ),
-              data: (_) => isLoggedIn
-                  ? TabBarView(
-                      controller: _tabs,
-                      children: [
-                        _PoemList(poems: filtered, user: user),
-                        _PoemList(
-                          poems: filtered
-                              .where((p) => !user.readPoems.contains(p.id))
-                              .toList(),
-                          user: user,
-                        ),
-                        _PoemList(
-                          poems: filtered
-                              .where((p) => user.readPoems.contains(p.id))
-                              .toList(),
-                          user: user,
-                        ),
-                      ],
-                    )
-                  : _PoemList(poems: filtered, user: null),
+              data: (_) {
+                if (!isLoggedIn) return _PoemList(poems: filtered, user: null);
+                // Синхронизируем TabController с текущим значением showAllTab
+                _syncTabs(user!.showAllTab);
+                final unread = filtered
+                    .where((p) => !user.readPoems.contains(p.id))
+                    .toList();
+                final readList = filtered
+                    .where((p) => user.readPoems.contains(p.id))
+                    .toList();
+                return TabBarView(
+                  controller: _tabs,
+                  children: user.showAllTab
+                      ? [
+                          _PoemList(poems: filtered, user: user),
+                          _PoemList(poems: unread, user: user),
+                          _PoemList(poems: readList, user: user),
+                        ]
+                      : [
+                          _PoemList(poems: unread, user: user),
+                          _PoemList(poems: readList, user: user),
+                        ],
+                );
+              },
             ),
           ),
         ],
