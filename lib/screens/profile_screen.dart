@@ -30,11 +30,12 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     super.dispose();
   }
 
-  Future<void> _save() async {
+  Future<void> _save(bool currentShowAllTab) async {
     setState(() { _loading = true; _error = null; _success = null; });
     final err = await ref.read(authProvider.notifier).updateProfile(
       newPassword: _passCtrl.text.isNotEmpty ? _passCtrl.text : null,
       userData: _bioCtrl.text,
+      showAllTab: currentShowAllTab,
     );
     if (mounted) setState(() {
       _loading = false;
@@ -206,45 +207,89 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
               const SizedBox(height: 12),
 
               // ── Account settings ──────────────────────────────────────
-              _SectionCard(child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _SectionTitle('Настройки аккаунта'),
-                  const SizedBox(height: 14),
-                  _ProfileField(
-                    controller: _passCtrl,
-                    label: 'Новый пароль',
-                    icon: Icons.lock_outline_rounded,
-                    obscure: true,
-                  ),
-                  const SizedBox(height: 10),
-                  _ProfileField(
-                    controller: _bioCtrl,
-                    label: 'О себе',
-                    icon: Icons.info_outline_rounded,
-                    maxLines: 3,
-                  ),
-                  if (_error != null) ...[
-                    const SizedBox(height: 10),
-                    _StatusMsg(text: _error!, isError: true),
-                  ],
-                  if (_success != null) ...[
-                    const SizedBox(height: 10),
-                    _StatusMsg(text: _success!, isError: false),
-                  ],
-                  const SizedBox(height: 14),
-                  SizedBox(
-                    width: double.infinity,
-                    height: 46,
-                    child: FilledButton(
-                      onPressed: _loading ? null : _save,
-                      child: Text('Сохранить',
-                          style: GoogleFonts.notoSerif(
-                              fontWeight: FontWeight.w600, fontSize: 14)),
+              _SectionCard(child: Builder(builder: (context) {
+                final showAll = user.showAllTab;
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _SectionTitle('Настройки аккаунта'),
+                    const SizedBox(height: 14),
+                    _ProfileField(
+                      controller: _passCtrl,
+                      label: 'Новый пароль',
+                      icon: Icons.lock_outline_rounded,
+                      obscure: true,
                     ),
-                  ),
-                ],
-              )),
+                    const SizedBox(height: 10),
+                    _ProfileField(
+                      controller: _bioCtrl,
+                      label: 'О себе',
+                      icon: Icons.info_outline_rounded,
+                      maxLines: 3,
+                    ),
+                    const SizedBox(height: 14),
+                    // ── Переключатель вкладки «Все» ──────────────────────
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: cs.surface.withOpacity(0.5),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                            color: cs.outline, width: 0.9),
+                      ),
+                      child: Row(children: [
+                        Icon(Icons.tab_outlined,
+                            size: 20, color: cs.onSurfaceVariant),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('Вкладка «Все»',
+                                  style: GoogleFonts.notoSerif(
+                                      color: cs.onSurface,
+                                      fontSize: 14)),
+                              Text('Показывать все стихи отдельной вкладкой',
+                                  style: GoogleFonts.notoSerif(
+                                      color: cs.onSurfaceVariant,
+                                      fontSize: 12)),
+                            ],
+                          ),
+                        ),
+                        Switch(
+                          value: showAll,
+                          onChanged: _loading
+                              ? null
+                              : (v) => ref
+                                  .read(authProvider.notifier)
+                                  .updateProfile(showAllTab: v),
+                          activeColor: cs.primary,
+                        ),
+                      ]),
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 10),
+                      _StatusMsg(text: _error!, isError: true),
+                    ],
+                    if (_success != null) ...[
+                      const SizedBox(height: 10),
+                      _StatusMsg(text: _success!, isError: false),
+                    ],
+                    const SizedBox(height: 14),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 46,
+                      child: FilledButton(
+                        onPressed: _loading ? null : () => _save(showAll),
+                        child: Text('Сохранить',
+                            style: GoogleFonts.notoSerif(
+                                fontWeight: FontWeight.w600, fontSize: 14)),
+                      ),
+                    ),
+                  ],
+                );
+              })),
               const SizedBox(height: 12),
 
               // ── AI key ────────────────────────────────────────────────
