@@ -4,7 +4,7 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 // 🔧 Замени на свой URL из Northflank после деплоя
 const String kBaseUrl = String.fromEnvironment(
   'BASE_URL',
-  defaultValue: 'https://zynqochka-ssback-go.hf.space/',
+  defaultValue: 'https://zynqochka-ssback-go.hf.space',
 );
 
 const _kTokenKey = 'jwt_token';
