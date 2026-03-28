@@ -296,4 +296,19 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     if (state.value == null) return 'Не авторизован';
     return _api.confirmNewEmailCode(newEmail, code);
   }
+
+  // ── Псевдонимы для login_screen ───────────────────────────────────────────
+
+  Future<String?> resolveEmail(String usernameOrEmail) =>
+      _api.resolveEmail(usernameOrEmail);
+
+  Future<String?> sendOtp(String email, {String? username}) {
+    if (username != null) return sendRegisterOtp(email, username);
+    return _api.sendOtp(email, isNew: false);
+  }
+
+  Future<String?> verifyOtp(String email, String code, {String? username}) {
+    if (username != null) return verifyRegisterOtp(email, code, username);
+    return verifyLoginOtp(email, code);
+  }
 }
