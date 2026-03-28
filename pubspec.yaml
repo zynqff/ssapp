@@ -1,7 +1,7 @@
 name: ssapp
 description: Сборник Стихов
 publish_to: none
-version: 1.0.4+4
+version: 1.0.5+5
 
 environment:
   sdk: ^3.4.0
@@ -22,7 +22,6 @@ dependencies:
   shimmer: ^3.0.0
   google_sign_in: ^6.2.1
   shared_preferences: ^2.3.2
-  supabase_flutter: ^2.8.4
   url_launcher: ^6.3.0
 
 dev_dependencies:
