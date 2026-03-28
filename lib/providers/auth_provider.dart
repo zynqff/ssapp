@@ -280,10 +280,20 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     return null;
   }
 
-  // ── Смена email ───────────────────────────────────────────────────────────
+  // ── Смена email (двухэтапная) ─────────────────────────────────────────────
 
-  Future<String?> changeEmail(String newEmail) async {
+  Future<String?> requestEmailChange(String newEmail) async {
     if (state.value == null) return 'Не авторизован';
-    return _api.changeEmail(newEmail);
+    return _api.requestEmailChange(newEmail);
+  }
+
+  Future<String?> confirmOldEmailCode(String code) async {
+    if (state.value == null) return 'Не авторизован';
+    return _api.confirmOldEmailCode(code);
+  }
+
+  Future<String?> confirmNewEmailCode(String newEmail, String code) async {
+    if (state.value == null) return 'Не авторизован';
+    return _api.confirmNewEmailCode(newEmail, code);
   }
 }
