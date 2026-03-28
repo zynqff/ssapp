@@ -4,7 +4,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/poems_provider.dart';
@@ -12,22 +11,10 @@ import 'providers/config_provider.dart';
 import 'screens/poems_screen.dart';
 import 'screens/login_screen.dart';
 
-const String kAppVersion = '1.0.4';
+const String kAppVersion = '1.0.5';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-await Supabase.initialize(
-  url: const String.fromEnvironment(
-    'SUPABASE_URL',
-    defaultValue: 'https://ymnbrazhehyafkkvzpnt.supabase.co',
-  ),
-  anonKey: const String.fromEnvironment(
-    'SUPABASE_ANON_KEY',
-    defaultValue: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InltbmJyYXpoZWh5YWZra3Z6cG50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc4NTk2NDEsImV4cCI6MjA4MzQzNTY0MX0.1Idd7OuDuuz9yDn2g3CzIdpAOWMSe-JGHkwbfkgXJAE',
-  ),
-);
-  
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
@@ -42,7 +29,6 @@ class _App extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeState = ref.watch(themeProvider);
     final accent = themeState.accent;
-
     return MaterialApp(
       title: 'Сборник Стихов',
       debugShowCheckedModeBanner: false,
@@ -55,7 +41,6 @@ class _App extends ConsumerWidget {
 
   ThemeData _buildTheme(Brightness brightness, Color accent) {
     final isDark = brightness == Brightness.dark;
-
     final bgColor      = isDark ? const Color(0xFF1A1A2E) : const Color(0xFFF4F2F8);
     final surfaceColor = isDark ? const Color(0xFF252538) : const Color(0xFFFFFFFF);
     final surfaceVar   = isDark ? const Color(0xFF2E2E45) : const Color(0xFFEDE9F4);
@@ -93,70 +78,42 @@ class _App extends ConsumerWidget {
         foregroundColor: onBg,
         elevation: 0,
         scrolledUnderElevation: 0,
-        systemOverlayStyle: isDark
-            ? SystemUiOverlayStyle.light
-            : SystemUiOverlayStyle.dark,
-        titleTextStyle: GoogleFonts.playfairDisplay(
-          color: onBg,
-          fontSize: 26,
-          fontWeight: FontWeight.w600,
-          letterSpacing: 0.2,
-        ),
+        systemOverlayStyle: isDark ? SystemUiOverlayStyle.light : SystemUiOverlayStyle.dark,
+        titleTextStyle: GoogleFonts.playfairDisplay(color: onBg, fontSize: 26, fontWeight: FontWeight.w600, letterSpacing: 0.2),
         iconTheme: IconThemeData(color: onBg, size: 22),
       ),
       cardTheme: CardThemeData(
         color: surfaceColor,
         elevation: 0,
-        shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
         margin: const EdgeInsets.only(bottom: 10),
       ),
       textTheme: GoogleFonts.notoSerifTextTheme(
         isDark ? ThemeData.dark().textTheme : ThemeData.light().textTheme,
       ).copyWith(
-        titleMedium: GoogleFonts.playfairDisplay(
-          color: onBg,
-          fontSize: 17,
-          fontWeight: FontWeight.w600,
-        ),
-        bodyMedium: GoogleFonts.notoSerif(
-          color: accent,
-          fontSize: 13,
-          fontStyle: FontStyle.italic,
-        ),
-        bodySmall: GoogleFonts.notoSerif(
-          color: onSurfaceVar,
-          fontSize: 12.5,
-          height: 1.5,
-        ),
+        titleMedium: GoogleFonts.playfairDisplay(color: onBg, fontSize: 17, fontWeight: FontWeight.w600),
+        bodyMedium: GoogleFonts.notoSerif(color: accent, fontSize: 13, fontStyle: FontStyle.italic),
+        bodySmall: GoogleFonts.notoSerif(color: onSurfaceVar, fontSize: 12.5, height: 1.5),
       ),
       inputDecorationTheme: InputDecorationTheme(
         hintStyle: GoogleFonts.notoSerif(color: onSurfaceVar),
         border: InputBorder.none,
         labelStyle: GoogleFonts.notoSerif(color: onSurfaceVar),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: outlineColor),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: accent, width: 1.5),
-        ),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: outlineColor)),
+        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: accent, width: 1.5)),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
           backgroundColor: accent,
           foregroundColor: isDark ? const Color(0xFF1A1A2E) : Colors.white,
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(
           foregroundColor: accent,
           side: BorderSide(color: accent.withOpacity(0.5)),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
     );
@@ -171,20 +128,14 @@ class _Root extends ConsumerWidget {
     final configAsync = ref.watch(configProvider);
     final auth = ref.watch(authProvider);
 
-    // Ждём только auth — конфиг грузится параллельно в фоне
     return auth.when(
       loading: () => const _ConnectingScreen(),
       error: (e, _) => _ServerErrorScreen(message: e.toString()),
       data: (user) {
-        // Конфиг уже готов — проверяем тех. перерыв и force update
         final config = configAsync.valueOrNull;
         if (config != null) {
-          if (config.isUnderMaintenance) {
-            return _MaintenanceScreen(until: config.maintenanceUntil!);
-          }
-          if (_shouldForceUpdate(config.forceUpdateVersion)) {
-            return const _ForceUpdateScreen();
-          }
+          if (config.isUnderMaintenance) return _MaintenanceScreen(until: config.maintenanceUntil!);
+          if (_shouldForceUpdate(config.forceUpdateVersion)) return const _ForceUpdateScreen();
         }
         return user != null ? const PoemsScreen() : const LoginScreen();
       },
@@ -203,307 +154,103 @@ class _Root extends ConsumerWidget {
         if (c > m) return false;
       }
       return false;
-    } catch (_) {
-      return false;
-    }
+    } catch (_) { return false; }
   }
 }
-
-// ── Экран тех. перерыва с обратным отсчётом ───────────────────────────────────
 
 class _MaintenanceScreen extends StatefulWidget {
   final DateTime until;
   const _MaintenanceScreen({required this.until});
-
   @override
   State<_MaintenanceScreen> createState() => _MaintenanceScreenState();
 }
 
 class _MaintenanceScreenState extends State<_MaintenanceScreen> {
   late Timer _timer;
-
   @override
   void initState() {
     super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) { if (mounted) setState(() {}); });
   }
-
   @override
-  void dispose() {
-    _timer.cancel();
-    super.dispose();
-  }
+  void dispose() { _timer.cancel(); super.dispose(); }
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final remaining = widget.until.difference(DateTime.now());
-
     if (remaining.isNegative) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (context.mounted) {
-          final container = ProviderScope.containerOf(context);
-          container.read(configProvider.notifier).reload();
-        }
+        if (context.mounted) ProviderScope.containerOf(context).read(configProvider.notifier).reload();
       });
     }
-
     final h = remaining.inHours;
     final m = remaining.inMinutes % 60;
     final s = remaining.inSeconds % 60;
+    final timeStr = h > 0 ? '$h ч $m мин $s сек' : m > 0 ? '$m мин $s сек' : '$s сек';
 
-    final timeStr = h > 0
-        ? '$h ч $m мин $s сек'
-        : m > 0
-            ? '$m мин $s сек'
-            : '$s сек';
-
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(22),
-                  border: Border.all(
-                    color: cs.primary.withOpacity(0.3),
-                    width: 1.2,
-                  ),
-                ),
-                child: Icon(Icons.build_outlined, size: 34, color: cs.primary),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Технические работы',
-                style: GoogleFonts.playfairDisplay(
-                  color: cs.onSurface,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Мы скоро вернёмся. Спасибо за терпение!',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSerif(
-                  color: cs.onSurfaceVariant,
-                  fontSize: 14,
-                  fontStyle: FontStyle.italic,
-                ),
-              ),
-              const SizedBox(height: 28),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
-                decoration: BoxDecoration(
-                  color: cs.surfaceVariant,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: cs.outline, width: 0.8),
-                ),
-                child: Column(children: [
-                  Text(
-                    'Осталось',
-                    style: GoogleFonts.notoSerif(
-                      color: cs.onSurfaceVariant,
-                      fontSize: 12,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    remaining.isNegative ? 'Завершаем...' : timeStr,
-                    style: GoogleFonts.playfairDisplay(
-                      color: cs.primary,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ]),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 72, height: 72, decoration: BoxDecoration(color: cs.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(22), border: Border.all(color: cs.primary.withOpacity(0.3), width: 1.2)), child: Icon(Icons.build_outlined, size: 34, color: cs.primary)),
+      const SizedBox(height: 24),
+      Text('Технические работы', style: GoogleFonts.playfairDisplay(color: cs.onSurface, fontSize: 22, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 10),
+      Text('Мы скоро вернёмся. Спасибо за терпение!', textAlign: TextAlign.center, style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic)),
+      const SizedBox(height: 28),
+      Container(padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14), decoration: BoxDecoration(color: cs.surfaceVariant, borderRadius: BorderRadius.circular(16), border: Border.all(color: cs.outline, width: 0.8)), child: Column(children: [
+        Text('Осталось', style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 12)),
+        const SizedBox(height: 4),
+        Text(remaining.isNegative ? 'Завершаем...' : timeStr, style: GoogleFonts.playfairDisplay(color: cs.primary, fontSize: 26, fontWeight: FontWeight.w600)),
+      ])),
+    ]))));
   }
 }
-
-// ── Экран принудительного обновления ─────────────────────────────────────────
 
 class _ForceUpdateScreen extends StatelessWidget {
   const _ForceUpdateScreen();
-
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 72,
-                height: 72,
-                decoration: BoxDecoration(
-                  color: cs.primary.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(22),
-                ),
-                child: Icon(Icons.system_update_rounded,
-                    size: 34, color: cs.primary),
-              ),
-              const SizedBox(height: 24),
-              Text(
-                'Доступно обновление',
-                style: GoogleFonts.playfairDisplay(
-                  color: cs.onSurface,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                'Пожалуйста, обновите приложение чтобы продолжить.',
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSerif(
-                  color: cs.onSurfaceVariant,
-                  fontSize: 14,
-                  height: 1.6,
-                ),
-              ),
-              const SizedBox(height: 28),
-              FilledButton.icon(
-                onPressed: () async {
-                  final uri = Uri.parse(
-                    'https://www.rustore.ru/catalog/app/com.sscollective.app',
-                  );
-                  if (await canLaunchUrl(uri)) await launchUrl(uri);
-                },
-                icon: const Icon(Icons.download_rounded),
-                label: Text(
-                  'Обновить',
-                  style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 72, height: 72, decoration: BoxDecoration(color: cs.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(22)), child: Icon(Icons.system_update_rounded, size: 34, color: cs.primary)),
+      const SizedBox(height: 24),
+      Text('Доступно обновление', style: GoogleFonts.playfairDisplay(color: cs.onSurface, fontSize: 22, fontWeight: FontWeight.w600)),
+      const SizedBox(height: 10),
+      Text('Пожалуйста, обновите приложение чтобы продолжить.', textAlign: TextAlign.center, style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 14, height: 1.6)),
+      const SizedBox(height: 28),
+      FilledButton.icon(onPressed: () async { final uri = Uri.parse('https://www.rustore.ru/catalog/app/com.sscollective.app'); if (await canLaunchUrl(uri)) await launchUrl(uri); }, icon: const Icon(Icons.download_rounded), label: Text('Обновить', style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600))),
+    ]))));
   }
 }
-
-// ── Экран подключения ─────────────────────────────────────────────────────────
 
 class _ConnectingScreen extends ConsumerWidget {
   const _ConnectingScreen();
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 72,
-              height: 72,
-              decoration: BoxDecoration(
-                color: cs.primary.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: cs.primary.withOpacity(0.3),
-                  width: 1.2,
-                ),
-              ),
-              child: Icon(Icons.menu_book_outlined, size: 34, color: cs.primary),
-            ),
-            const SizedBox(height: 24),
-            SizedBox(
-              width: 22,
-              height: 22,
-              child: CircularProgressIndicator(
-                strokeWidth: 2,
-                color: cs.primary,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Подключение...',
-              style: GoogleFonts.notoSerif(
-                color: cs.onSurfaceVariant,
-                fontSize: 14,
-                fontStyle: FontStyle.italic,
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
+    return Scaffold(body: Center(child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Container(width: 72, height: 72, decoration: BoxDecoration(color: cs.primary.withOpacity(0.12), borderRadius: BorderRadius.circular(22), border: Border.all(color: cs.primary.withOpacity(0.3), width: 1.2)), child: Icon(Icons.menu_book_outlined, size: 34, color: cs.primary)),
+      const SizedBox(height: 24),
+      SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: cs.primary)),
+      const SizedBox(height: 16),
+      Text('Подключение...', style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 14, fontStyle: FontStyle.italic)),
+    ])));
   }
 }
-
-// ── Экран ошибки подключения ──────────────────────────────────────────────────
 
 class _ServerErrorScreen extends ConsumerWidget {
   final String message;
   const _ServerErrorScreen({required this.message});
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    return Scaffold(
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.wifi_off_rounded,
-                  size: 56, color: cs.onSurfaceVariant.withOpacity(0.4)),
-              const SizedBox(height: 20),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: GoogleFonts.notoSerif(
-                  color: cs.onSurfaceVariant,
-                  fontSize: 14,
-                  height: 1.6,
-                ),
-              ),
-              const SizedBox(height: 24),
-              FilledButton.icon(
-                onPressed: () {
-                  ref.invalidate(authProvider);
-                  ref.invalidate(poemsProvider);
-                  ref.invalidate(configProvider);
-                },
-                icon: const Icon(Icons.refresh_rounded),
-                label: Text(
-                  'Повторить',
-                  style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () {},
-                child: Text(
-                  'Попробовать позже',
-                  style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+    return Scaffold(body: Center(child: Padding(padding: const EdgeInsets.all(32), child: Column(mainAxisSize: MainAxisSize.min, children: [
+      Icon(Icons.wifi_off_rounded, size: 56, color: cs.onSurfaceVariant.withOpacity(0.4)),
+      const SizedBox(height: 20),
+      Text(message, textAlign: TextAlign.center, style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 14, height: 1.6)),
+      const SizedBox(height: 24),
+      FilledButton.icon(onPressed: () { ref.invalidate(authProvider); ref.invalidate(poemsProvider); ref.invalidate(configProvider); }, icon: const Icon(Icons.refresh_rounded), label: Text('Повторить', style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600))),
+      const SizedBox(height: 12),
+      TextButton(onPressed: () {}, child: Text('Попробовать позже', style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant))),
+    ]))));
   }
 }
