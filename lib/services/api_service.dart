@@ -181,12 +181,36 @@ class ApiService {
     }
   }
 
-  Future<String?> changeEmail(String newEmail) async {
+  /// Шаг 1: запросить смену email (OTP на старый email)
+  Future<String?> requestEmailChange(String newEmail) async {
     try {
-      await _dio.post('/api/change_email', data: {'new_email': newEmail.trim()});
+      await _dio.post('/api/change_email/request',
+          data: {'new_email': newEmail.trim()});
       return null;
     } on DioException catch (e) {
-      return _extractError(e) ?? 'Ошибка смены email';
+      return _extractError(e) ?? 'Ошибка запроса смены email';
+    }
+  }
+
+  /// Шаг 2: подтвердить OTP со старого email
+  Future<String?> confirmOldEmailCode(String token) async {
+    try {
+      await _dio.post('/api/change_email/confirm_old',
+          data: {'token': token.trim()});
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Неверный или истёкший код';
+    }
+  }
+
+  /// Шаг 3: подтвердить OTP с нового email
+  Future<String?> confirmNewEmailCode(String newEmail, String token) async {
+    try {
+      await _dio.post('/api/change_email/confirm_new',
+          data: {'new_email': newEmail.trim(), 'token': token.trim()});
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Неверный или истёкший код';
     }
   }
 
