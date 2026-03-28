@@ -1,9 +1,9 @@
 import 'dart:convert';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
-import 'package:supabase_flutter/supabase_flutter.dart' hide User;
 import '../models/user.dart';
 import '../services/database_service.dart';
+import '../services/api_service.dart';
 import '../services/sync_service.dart';
 
 final authProvider =
@@ -16,7 +16,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     _init();
   }
 
-  final _supabase = Supabase.instance.client;
+  final _api = ApiService();
   final _db = DatabaseService();
   final _sync = SyncService();
 
@@ -28,197 +28,138 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     ),
   );
 
-  Future<void> _init() async {
-    _supabase.auth.onAuthStateChange.listen((data) async {
-      final session = data.session;
-      if (session == null) {
-        state = const AsyncValue.data(null);
-      } else {
-        await _loadUserWithRetry(session.user.id);
-      }
-    });
+  // ── Инициализация — проверяем сохранённый JWT ─────────────────────────────
 
-    final session = _supabase.auth.currentSession;
-    if (session == null) {
+  Future<void> _init() async {
+    final token = await _api.getToken();
+    if (token == null) {
       state = const AsyncValue.data(null);
       return;
     }
 
-    final hasLocal = await _db.hasPoems();
-    if (hasLocal) {
-      final user = await _fetchUserRow(session.user.id);
-      if (user != null) {
-        final readPoems = await _db.getReadPoems(user.username);
-        final pinned = await _db.getPinnedPoem(user.username);
-        final localUser = user.copyWith(readPoems: readPoems, pinnedPoemId: pinned);
-        state = AsyncValue.data(localUser);
-        _backgroundSync(user.username);
-        return;
-      }
+    // Читаем username из JWT payload (без верификации — верификация на сервере)
+    final cached = _userFromToken(token);
+    if (cached != null) {
+      // Показываем кешированного пользователя мгновенно
+      final readPoems = await _db.getReadPoems(cached.username);
+      final pinned = await _db.getPinnedPoem(cached.username);
+      state = AsyncValue.data(cached.copyWith(
+        readPoems: readPoems,
+        pinnedPoemId: pinned,
+      ));
+      // Обновляем с сервера в фоне
+      _backgroundRefresh(cached.username);
+    } else {
+      await _refreshFromServer();
     }
-
-    await _loadUserWithRetry(session.user.id);
   }
 
-  Future<User?> _fetchUserRow(String uid) async {
+  User? _userFromToken(String token) {
     try {
-      final data = await _supabase
-          .from('user')
-          .select()
-          .eq('supabase_uid', uid)
-          .single();
-      return _userFromRow(data);
+      final parts = token.split('.');
+      if (parts.length < 2) return null;
+      final payload = jsonDecode(
+          utf8.decode(base64Url.decode(base64Url.normalize(parts[1]))));
+      final username = payload['sub'] as String?;
+      final isAdmin = payload['is_admin'] as bool? ?? false;
+      if (username == null) return null;
+      return User(username: username, isAdmin: isAdmin);
     } catch (_) {
       return null;
     }
   }
 
-  Future<void> _loadUserWithRetry(String uid) async {
-    for (int i = 0; i < 5; i++) {
-      final user = await _fetchUserRow(uid);
-      if (user != null) {
+  Future<void> _refreshFromServer() async {
+    final data = await _api.getMe();
+    if (data == null) {
+      // Токен протух или сервер недоступен
+      await _api.clearToken();
+      if (mounted) state = const AsyncValue.data(null);
+      return;
+    }
+    final user = User.fromJson(data);
+    await _db.setReadPoems(user.username, user.readPoems);
+    if (mounted) state = AsyncValue.data(user);
+    _backgroundSync(user.username);
+  }
+
+  Future<void> _backgroundRefresh(String username) async {
+    try {
+      final data = await _api.getMe();
+      if (data != null) {
+        final user = User.fromJson(data);
         await _db.setReadPoems(user.username, user.readPoems);
         if (mounted) state = AsyncValue.data(user);
-        _backgroundSync(user.username);
-        return;
       }
-      await Future.delayed(const Duration(milliseconds: 600));
-    }
-    if (mounted) {
-      state = AsyncValue.error(
-        'Ошибка загрузки профиля. Проверьте интернет.',
-        StackTrace.current,
-      );
-    }
-  }
-
-  Future<String?> _loadUserDirect(String uid) async {
-    final user = await _fetchUserRow(uid);
-    if (user != null) {
-      await _db.setReadPoems(user.username, user.readPoems);
-      if (mounted) state = AsyncValue.data(user);
-      _backgroundSync(user.username);
-      return null;
-    } else {
-      if (mounted) state = const AsyncValue.data(null);
-      return 'Профиль не найден. Обратитесь в поддержку.';
-    }
-  }
-
-  User _userFromRow(Map<String, dynamic> row) {
-    final reads = (row['read_poems_json'] as List? ?? [])
-        .map((e) => (e as num).toInt())
-        .toList();
-    return User(
-      username: row['username'] as String,
-      isAdmin: row['is_admin'] as bool? ?? false,
-      readPoems: reads,
-      pinnedPoemId: (row['pinned_poem_id'] as num?)?.toInt(),
-      showAllTab: row['show_all_tab'] as bool? ?? false,
-      userData: row['user_data'] as String? ?? '',
-    );
+      await _sync.syncPoems();
+    } catch (_) {}
   }
 
   Future<void> _backgroundSync(String username) async {
     try {
       await _sync.fullSync(username);
-      final session = _supabase.auth.currentSession;
-      if (session == null) return;
-      final user = await _fetchUserRow(session.user.id);
-      if (user != null) {
-        await _db.setReadPoems(user.username, user.readPoems);
-        if (mounted && state.value != null) state = AsyncValue.data(user);
-      }
     } catch (_) {}
   }
 
-  // ── OTP: отправить код ─────────────────────────────────────────────────────
-
-  Future<String?> sendOtp(String email, {String? username}) async {
-    try {
-      await _supabase.auth.signInWithOtp(
-        email: email.trim(),
-        data: username != null ? {'username': username} : null,
-        shouldCreateUser: username != null,
-      );
-      return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (_) {
-      return 'Ошибка отправки кода. Проверьте интернет.';
+  Future<String?> _afterLogin() async {
+    final data = await _api.getMe();
+    if (data == null) {
+      await _api.clearToken();
+      if (mounted) state = const AsyncValue.data(null);
+      return 'Не удалось загрузить профиль. Проверьте интернет.';
     }
+    final user = User.fromJson(data);
+    await _db.setReadPoems(user.username, user.readPoems);
+    if (mounted) state = AsyncValue.data(user);
+    _backgroundSync(user.username);
+    return null;
   }
 
-  Future<String?> verifyOtp(String email, String token, {String? username}) async {
+  // ── OTP: отправить код ────────────────────────────────────────────────────
+
+  /// Вход — отправить OTP на email/username
+  Future<String?> sendLoginOtp(String emailOrUsername) async {
+    final email = await _api.resolveEmail(emailOrUsername);
+    if (email == null) return 'Пользователь не найден';
+    return _api.sendOtp(email, isNew: false);
+  }
+
+  /// Регистрация — отправить OTP на email
+  Future<String?> sendRegisterOtp(String email, String username) async {
+    return _api.sendOtp(email, username: username, isNew: true);
+  }
+
+  // ── OTP: подтвердить код ──────────────────────────────────────────────────
+
+  /// Подтвердить код для входа
+  Future<String?> verifyLoginOtp(String emailOrUsername, String code) async {
     state = const AsyncValue.loading();
-    try {
-      final res = await _supabase.auth.verifyOTP(
-        email: email.trim(),
-        token: token.trim(),
-        type: OtpType.email,
-      );
-
-      if (res.user == null) {
-        state = const AsyncValue.data(null);
-        return 'Не удалось подтвердить код';
-      }
-
-      final uid = res.user!.id;
-
-      if (username != null) {
-        final existing = await _fetchUserRow(uid);
-        if (existing == null) {
-          await _supabase.from('user').insert({
-            'supabase_uid': uid,
-            'username': username,
-            'email': email.trim(),
-            'is_admin': false,
-            'read_poems_json': [],
-            'show_all_tab': false,
-            'user_data': '',
-          });
-        }
-      }
-
-      final error = await _loadUserDirect(uid);
-      return error;
-    } on AuthException catch (e) {
+    final email = await _api.resolveEmail(emailOrUsername);
+    if (email == null) {
       state = const AsyncValue.data(null);
-      return _translateAuthError(e.message);
-    } catch (e) {
+      return 'Пользователь не найден';
+    }
+    final result = await _api.verifyOtp(email, code);
+    if (result.error != null) {
       state = const AsyncValue.data(null);
-      return 'Ошибка подтверждения: $e';
+      return result.error;
     }
+    return _afterLogin();
   }
 
-  // ── Резолв username → email ────────────────────────────────────────────────
-
-  Future<String?> resolveEmail(String usernameOrEmail) async {
-    if (usernameOrEmail.contains('@')) return usernameOrEmail.trim();
-    try {
-      final rows = await _supabase
-          .from('user')
-          .select('email')
-          .eq('username', usernameOrEmail.trim())
-          .limit(1);
-      if (rows.isEmpty) return null;
-      return rows.first['email'] as String?;
-    } catch (_) {
-      return null;
+  /// Подтвердить код для регистрации
+  Future<String?> verifyRegisterOtp(
+      String email, String code, String username) async {
+    state = const AsyncValue.loading();
+    final result = await _api.registerOtp(email, code, username);
+    if (result.error != null) {
+      state = const AsyncValue.data(null);
+      return result.error;
     }
+    return _afterLogin();
   }
 
-  String _translateAuthError(String message) {
-    final m = message.toLowerCase();
-    if (m.contains('invalid') && m.contains('otp')) return 'Неверный или истёкший код';
-    if (m.contains('expired')) return 'Код истёк. Запросите новый.';
-    if (m.contains('too many requests')) return 'Слишком много попыток. Попробуйте позже.';
-    if (m.contains('user not found')) return 'Пользователь не найден';
-    if (m.contains('email not confirmed')) return 'Email не подтверждён';
-    return message;
-  }
-
-  // ── Google ─────────────────────────────────────────────────────────────────
+  // ── Google ────────────────────────────────────────────────────────────────
 
   Future<String?> loginWithGoogle() async {
     try {
@@ -228,114 +169,91 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
       final idToken = auth.idToken;
       if (idToken == null) return 'Не удалось получить токен Google';
 
-      await _supabase.auth.signInWithIdToken(
-        provider: OAuthProvider.google,
-        idToken: idToken,
-        accessToken: auth.accessToken,
-      );
-
-      return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
+      state = const AsyncValue.loading();
+      final result = await _api.googleMobileAuth(idToken);
+      if (result.error != null) {
+        state = const AsyncValue.data(null);
+        return result.error;
+      }
+      return _afterLogin();
     } catch (e) {
+      state = const AsyncValue.data(null);
       return 'Ошибка Google входа: $e';
     }
   }
 
-  // ── Выход ──────────────────────────────────────────────────────────────────
+  // ── Выход ─────────────────────────────────────────────────────────────────
 
   Future<void> logout() async {
     final username = state.value?.username;
-    await _supabase.auth.signOut();
+    await _api.clearToken();
     await _googleSignIn.signOut();
     if (username != null) await _db.clearChatHistory(username);
     state = const AsyncValue.data(null);
   }
 
-  // ── Toggle read ────────────────────────────────────────────────────────────
+  // ── Toggle read ───────────────────────────────────────────────────────────
 
   Future<void> toggleRead(int poemId) async {
     final user = state.value;
     if (user == null) return;
 
-    final action = await _db.toggleReadPoem(user.username, poemId);
+    final localAction = await _db.toggleReadPoem(user.username, poemId);
     final newList = List<int>.from(user.readPoems);
-    action == 'marked' ? newList.add(poemId) : newList.remove(poemId);
+    localAction == 'marked' ? newList.add(poemId) : newList.remove(poemId);
     state = AsyncValue.data(user.copyWith(readPoems: newList));
 
     if (await _sync.isOnline()) {
-      try {
-        await _supabase
-            .from('user')
-            .update({'read_poems_json': newList})
-            .eq('supabase_uid', _supabase.auth.currentUser!.id);
-      } catch (_) {
-        await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
+      final action = await _api.toggleRead(poemId);
+      if (action == null) {
+        await _db.addToSyncQueue('toggle_read', '{"poem_id":$poemId}');
       }
     } else {
-      await _db.addToSyncQueue('toggle_read', jsonEncode({'poem_id': poemId}));
+      await _db.addToSyncQueue('toggle_read', '{"poem_id":$poemId}');
     }
   }
 
-  // ── Toggle pin ─────────────────────────────────────────────────────────────
+  // ── Toggle pin ────────────────────────────────────────────────────────────
 
   Future<void> togglePin(int poemId) async {
     final user = state.value;
     if (user == null) return;
 
-    final action = await _db.togglePinnedPoem(user.username, poemId);
-    final newPinned = action == 'pinned' ? poemId : null;
+    final localAction = await _db.togglePinnedPoem(user.username, poemId);
+    final newPinned = localAction == 'pinned' ? poemId : null;
     state = AsyncValue.data(user.copyWith(
       pinnedPoemId: newPinned,
       clearPinned: newPinned == null,
     ));
 
     if (await _sync.isOnline()) {
-      try {
-        await _supabase
-            .from('user')
-            .update({'pinned_poem_id': newPinned})
-            .eq('supabase_uid', _supabase.auth.currentUser!.id);
-      } catch (_) {
-        await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
+      final result = await _api.togglePin(poemId);
+      if (result.action == null) {
+        await _db.addToSyncQueue('toggle_pin', '{"poem_id":$poemId}');
       }
     } else {
-      await _db.addToSyncQueue('toggle_pin', jsonEncode({'poem_id': poemId}));
+      await _db.addToSyncQueue('toggle_pin', '{"poem_id":$poemId}');
     }
   }
 
-  // ── Обновление профиля ─────────────────────────────────────────────────────
+  // ── Обновление профиля ────────────────────────────────────────────────────
 
-  Future<String?> updateProfile({
-    String? userData,
-    bool? showAllTab,
-  }) async {
+  Future<String?> updateProfile({String? userData, bool? showAllTab}) async {
     final user = state.value;
     if (user == null) return 'Не авторизован';
 
-    try {
-      final updates = <String, dynamic>{};
-      if (userData != null) updates['user_data'] = userData;
-      if (showAllTab != null) updates['show_all_tab'] = showAllTab;
+    final error = await _api.updateProfile(
+        userData: userData, showAllTab: showAllTab);
+    if (error != null) return error;
 
-      if (updates.isNotEmpty) {
-        await _supabase
-            .from('user')
-            .update(updates)
-            .eq('supabase_uid', _supabase.auth.currentUser!.id);
-      }
-
-      state = AsyncValue.data(user.copyWith(
-        userData: userData ?? user.userData,
-        showAllTab: showAllTab ?? user.showAllTab,
-      ));
-      return null;
-    } catch (_) {
-      return 'Ошибка обновления';
-    }
+    state = AsyncValue.data(user.copyWith(
+      userData: userData ?? user.userData,
+      showAllTab: showAllTab ?? user.showAllTab,
+    ));
+    return null;
   }
 
-  // ── Смена никнейма с миграцией локальных данных ────────────────────────────
+  // ── Смена никнейма ────────────────────────────────────────────────────────
 
   Future<String?> changeUsername(String newUsername) async {
     final user = state.value;
@@ -346,115 +264,26 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
     if (trimmed.length < 2) return 'Никнейм слишком короткий';
     if (trimmed == user.username) return 'Это уже ваш никнейм';
 
-    try {
-      // Проверяем что никнейм свободен
-      final existing = await _supabase
-          .from('user')
-          .select('username')
-          .eq('username', trimmed)
-          .limit(1);
-      if ((existing as List).isNotEmpty) return 'Этот никнейм уже занят';
+    final result = await _api.changeUsername(trimmed);
+    if (result.error != null) return result.error;
 
-      final uid = _supabase.auth.currentUser!.id;
-      final oldUsername = user.username;
+    await _db.migrateUsername(user.username, trimmed);
 
-      // Обновляем в таблице user
-      await _supabase
-          .from('user')
-          .update({'username': trimmed})
-          .eq('supabase_uid', uid);
-
-      // Обновляем в Supabase Auth user_metadata
-      await _supabase.auth.updateUser(
-        UserAttributes(data: {'username': trimmed}),
-      );
-
-      // ── Миграция локальных данных SQLite ──────────────────────────────────
-      // Переносим read_poems, pinned_poem и chat_history со старого username
-      // на новый, чтобы история и отметки не потерялись после смены никнейма.
-      await _db.migrateUsername(oldUsername, trimmed);
-
-      // Обновляем локальное состояние
-      state = AsyncValue.data(User(
-        username: trimmed,
-        isAdmin: user.isAdmin,
-        readPoems: user.readPoems,
-        pinnedPoemId: user.pinnedPoemId,
-        showAllTab: user.showAllTab,
-        userData: user.userData,
-      ));
-
-      return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (_) {
-      return 'Ошибка смены никнейма';
-    }
+    state = AsyncValue.data(User(
+      username: trimmed,
+      isAdmin: user.isAdmin,
+      readPoems: user.readPoems,
+      pinnedPoemId: user.pinnedPoemId,
+      showAllTab: user.showAllTab,
+      userData: user.userData,
+    ));
+    return null;
   }
 
-  // ── Смена email (3 шага) ───────────────────────────────────────────────────
+  // ── Смена email ───────────────────────────────────────────────────────────
 
-  // Шаг 1: запрашиваем смену — Supabase пришлёт OTP на текущий email
-  Future<String?> requestEmailChange(String newEmail) async {
+  Future<String?> changeEmail(String newEmail) async {
     if (state.value == null) return 'Не авторизован';
-    try {
-      await _supabase.auth.updateUser(
-        UserAttributes(email: newEmail.trim()),
-      );
-      return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (_) {
-      return 'Ошибка отправки кода';
-    }
-  }
-
-  // Шаг 2: подтверждаем код со старого email
-  Future<String?> confirmOldEmailCode(String token) async {
-    final currentEmail = _supabase.auth.currentUser?.email;
-    if (currentEmail == null) return 'Не авторизован';
-    try {
-      await _supabase.auth.verifyOTP(
-        email: currentEmail,
-        token: token.trim(),
-        type: OtpType.emailChange,
-      );
-      return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (_) {
-      return 'Ошибка подтверждения кода';
-    }
-  }
-
-  // Шаг 3: подтверждаем код с нового email и обновляем таблицу user
-  // Также обновляем email в локальном кеше (данные по username не затрагиваются,
-  // поэтому отдельная миграция SQLite здесь не нужна).
-  Future<String?> confirmNewEmailCode(String newEmail, String token) async {
-    try {
-      final res = await _supabase.auth.verifyOTP(
-        email: newEmail.trim(),
-        token: token.trim(),
-        type: OtpType.emailChange,
-      );
-
-      if (res.user == null) return 'Не удалось подтвердить код';
-
-      final uid = res.user!.id;
-
-      // Обновляем email в таблице user
-      await _supabase
-          .from('user')
-          .update({'email': newEmail.trim()})
-          .eq('supabase_uid', uid);
-
-      // Email не влияет на ключи локальной БД (там везде username),
-      // поэтому миграция SQLite при смене email не требуется.
-      return null;
-    } on AuthException catch (e) {
-      return _translateAuthError(e.message);
-    } catch (_) {
-      return 'Ошибка подтверждения кода';
-    }
+    return _api.changeEmail(newEmail);
   }
 }
