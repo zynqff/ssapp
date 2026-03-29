@@ -20,13 +20,7 @@ class AuthNotifier extends StateNotifier<AsyncValue<User?>> {
   final _db = DatabaseService();
   final _sync = SyncService();
 
-  final _googleSignIn = GoogleSignIn(
-    scopes: ['email'],
-    serverClientId: const String.fromEnvironment(
-      'GOOGLE_CLIENT_ID',
-      defaultValue: '72452359173-jbv8l148p17o519264i026kpdtb1vofl.apps.googleusercontent.com',
-    ),
-  );
+  final _googleSignIn = GoogleSignIn(scopes: ['email']);
 
   // ── Инициализация — проверяем сохранённый JWT ─────────────────────────────
 
