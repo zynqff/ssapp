@@ -8,7 +8,7 @@ import 'providers/auth_provider.dart';
 import 'providers/theme_provider.dart';
 import 'providers/poems_provider.dart';
 import 'providers/config_provider.dart';
-import 'screens/poems_screen.dart';
+import 'screens/main_shell.dart';
 import 'screens/login_screen.dart';
 
 const String kAppVersion = '1.0.5';
@@ -67,6 +67,10 @@ class _App extends ConsumerWidget {
       surfaceVariant: surfaceVar,
       onSurfaceVariant: onSurfaceVar,
       outline: outlineColor,
+      outlineVariant: outlineColor.withOpacity(0.5),
+      surfaceContainerHighest: isDark
+          ? const Color(0xFF2E2E45)
+          : const Color(0xFFEDE9F4),
     );
 
     return ThemeData(
@@ -137,7 +141,7 @@ class _Root extends ConsumerWidget {
           if (config.isUnderMaintenance) return _MaintenanceScreen(until: config.maintenanceUntil!);
           if (_shouldForceUpdate(config.forceUpdateVersion)) return const _ForceUpdateScreen();
         }
-        return user != null ? const PoemsScreen() : const LoginScreen();
+        return user != null ? const MainShell() : const LoginScreen();
       },
     );
   }
