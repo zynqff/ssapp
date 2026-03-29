@@ -19,9 +19,15 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
   Future<void> load() async {
     state = const AsyncValue.loading();
     try {
-      final data = await _api.getMyLibrary();
+      final data = await _api.getMyLibrary().timeout(
+        const Duration(seconds: 15),
+        onTimeout: () => null,
+      );
       if (data == null) {
-        state = const AsyncValue.data(null);
+        state = AsyncValue.error(
+          'Не удалось загрузить библиотеку. Проверь интернет или запусти SQL миграцию.',
+          StackTrace.current,
+        );
         return;
       }
       state = AsyncValue.data(LibraryState.fromJson(data));
