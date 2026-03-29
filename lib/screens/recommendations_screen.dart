@@ -59,6 +59,31 @@ class RecommendationsScreen extends ConsumerWidget {
                   ),
                 ),
 
+                // Пусто
+                if (data.poemOfDay == null && data.topLibraries.isEmpty && data.popularPoems.isEmpty)
+                  SliverFillRemaining(
+                    child: Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(mainAxisSize: MainAxisSize.min, children: [
+                          Icon(Icons.auto_awesome_outlined, size: 64,
+                              color: cs.onSurfaceVariant.withOpacity(0.3)),
+                          const SizedBox(height: 16),
+                          Text('Пока здесь пусто',
+                              style: GoogleFonts.playfairDisplay(
+                                  fontSize: 20, fontWeight: FontWeight.w600,
+                                  color: cs.onSurfaceVariant)),
+                          const SizedBox(height: 8),
+                          Text('Публикуй библиотеки и добавляй стихи —\nони появятся в рекомендациях',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.notoSerif(fontSize: 13,
+                                  color: cs.onSurfaceVariant.withOpacity(0.7),
+                                  fontStyle: FontStyle.italic)),
+                        ]),
+                      ),
+                    ),
+                  ),
+
                 // Стих дня
                 if (data.poemOfDay != null)
                   SliverToBoxAdapter(
