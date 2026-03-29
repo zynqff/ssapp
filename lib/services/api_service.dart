@@ -1,7 +1,6 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-// 🔧 Замени на свой URL из Northflank после деплоя
 const String kBaseUrl = String.fromEnvironment(
   'BASE_URL',
   defaultValue: 'https://zynqochka-ssback-go.hf.space',
@@ -32,7 +31,7 @@ class ApiService {
       },
     ));
 
-  // ── Token ────────────────────────────────────────────────────────────────
+  // ── Token ─────────────────────────────────────────────────────────────────
 
   Future<void> saveToken(String token) =>
       _storage.write(key: _kTokenKey, value: token);
@@ -41,10 +40,8 @@ class ApiService {
 
   Future<void> clearToken() => _storage.delete(key: _kTokenKey);
 
-  // ── OTP ──────────────────────────────────────────────────────────────────
+  // ── OTP ───────────────────────────────────────────────────────────────────
 
-  /// Отправить OTP код на email.
-  /// [isNew]=true → регистрация (нужен [username]), false → вход.
   Future<String?> sendOtp(String email,
       {String? username, bool isNew = false}) async {
     try {
@@ -59,7 +56,6 @@ class ApiService {
     }
   }
 
-  /// Подтвердить OTP для входа (пользователь уже существует).
   Future<({String? error, String? token, String? username, bool isAdmin})>
       verifyOtp(String email, String code) async {
     try {
@@ -82,7 +78,6 @@ class ApiService {
     }
   }
 
-  /// Подтвердить OTP + создать пользователя (регистрация).
   Future<({String? error, String? token, String? username, bool isAdmin})>
       registerOtp(String email, String code, String username) async {
     try {
@@ -106,7 +101,6 @@ class ApiService {
     }
   }
 
-  /// Получить email по username (для входа по никнейму).
   Future<String?> resolveEmail(String usernameOrEmail) async {
     if (usernameOrEmail.contains('@')) return usernameOrEmail.trim();
     try {
@@ -118,7 +112,7 @@ class ApiService {
     }
   }
 
-  // ── Google ───────────────────────────────────────────────────────────────
+  // ── Google ────────────────────────────────────────────────────────────────
 
   Future<({String? error, String? token, String? username, bool isAdmin})>
       googleMobileAuth(String idToken) async {
@@ -140,7 +134,7 @@ class ApiService {
     }
   }
 
-  // ── User ─────────────────────────────────────────────────────────────────
+  // ── User ──────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> getMe() async {
     try {
@@ -163,7 +157,6 @@ class ApiService {
     }
   }
 
-  /// Смена никнейма. Сервер возвращает новый JWT — сохраняем.
   Future<({String? error, String? newUsername})> changeUsername(
       String newUsername) async {
     try {
@@ -181,7 +174,6 @@ class ApiService {
     }
   }
 
-  /// Шаг 1: запросить смену email (OTP на старый email)
   Future<String?> requestEmailChange(String newEmail) async {
     try {
       await _dio.post('/api/change_email/request',
@@ -192,7 +184,6 @@ class ApiService {
     }
   }
 
-  /// Шаг 2: подтвердить OTP со старого email
   Future<String?> confirmOldEmailCode(String token) async {
     try {
       await _dio.post('/api/change_email/confirm_old',
@@ -203,7 +194,6 @@ class ApiService {
     }
   }
 
-  /// Шаг 3: подтвердить OTP с нового email
   Future<String?> confirmNewEmailCode(String newEmail, String token) async {
     try {
       await _dio.post('/api/change_email/confirm_new',
@@ -354,6 +344,186 @@ class ApiService {
           .map((k, v) => MapEntry(k, v.toString()));
     } catch (_) {
       return null;
+    }
+  }
+
+  // ── Рекомендации ──────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>?> fetchRecommendations() async {
+    try {
+      final res = await _dio.get('/api/recommendations');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  // ── Библиотека ────────────────────────────────────────────────────────────
+
+  Future<Map<String, dynamic>?> getMyLibrary() async {
+    try {
+      final res = await _dio.get('/api/library/mine');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getLibrary(int id) async {
+    try {
+      final res = await _dio.get('/api/library/$id');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> updateMyLibrary(String name, String description) async {
+    try {
+      await _dio.put('/api/library/mine',
+          data: {'name': name, 'description': description});
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка обновления';
+    }
+  }
+
+  /// Добавить стих из общей БД
+  Future<String?> addPoemToLibrary(int poemId) async {
+    try {
+      await _dio.post('/api/library/mine/poems', data: {'poem_id': poemId});
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка добавления';
+    }
+  }
+
+  /// Добавить кастомный стих
+  Future<String?> addCustomPoemToLibrary({
+    required String title,
+    required String author,
+    required String text,
+  }) async {
+    try {
+      await _dio.post('/api/library/mine/poems', data: {
+        'custom_title': title,
+        'custom_author': author,
+        'custom_text': text,
+      });
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка добавления';
+    }
+  }
+
+  Future<String?> removePoemFromLibrary(int entryId) async {
+    try {
+      await _dio.delete('/api/library/mine/poems/$entryId');
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка удаления';
+    }
+  }
+
+  Future<Map<String, dynamic>?> toggleLibraryPoemRead(int entryId) async {
+    try {
+      final res = await _dio
+          .post('/api/library/mine/poems/$entryId/toggle_read');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<({String? error, String? status})> publishLibrary() async {
+    try {
+      final res = await _dio.post('/api/library/mine/publish');
+      return (error: null, status: res.data['status'] as String?);
+    } on DioException catch (e) {
+      return (error: _extractError(e) ?? 'Ошибка публикации', status: null);
+    }
+  }
+
+  Future<Map<String, dynamic>?> toggleLibraryLike(int libraryId) async {
+    try {
+      final res = await _dio.post('/api/library/$libraryId/like');
+      return res.data as Map<String, dynamic>;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<String?> saveLibrary(int libraryId, {bool isDefault = false}) async {
+    try {
+      await _dio.post('/api/library/$libraryId/save',
+          data: {'is_default': isDefault});
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка сохранения';
+    }
+  }
+
+  Future<String?> unsaveLibrary(int libraryId) async {
+    try {
+      await _dio.delete('/api/library/$libraryId/save');
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка';
+    }
+  }
+
+  Future<String?> setDefaultLibrary(int libraryId) async {
+    try {
+      await _dio.post('/api/library/$libraryId/set_default');
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка';
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> searchLibraries(String query) async {
+    try {
+      final res = await _dio.get('/api/library/search',
+          queryParameters: {'q': query});
+      return List<Map<String, dynamic>>.from(
+          (res.data['libraries'] as List));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // ── Admin — модерация ─────────────────────────────────────────────────────
+
+  Future<List<Map<String, dynamic>>> getPendingLibraries() async {
+    try {
+      final res = await _dio.get('/api/admin/libraries/pending');
+      return List<Map<String, dynamic>>.from(
+          (res.data['libraries'] as List));
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<String?> moderateLibrary(int libraryId,
+      {required String action, String rejectReason = ''}) async {
+    try {
+      await _dio.post('/api/admin/libraries/$libraryId/moderate', data: {
+        'action': action,
+        'reject_reason': rejectReason,
+      });
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка модерации';
+    }
+  }
+
+  Future<bool> setPoemOfDay(int poemId) async {
+    try {
+      await _dio
+          .post('/api/admin/poem_of_day', data: {'poem_id': poemId});
+      return true;
+    } catch (_) {
+      return false;
     }
   }
 
