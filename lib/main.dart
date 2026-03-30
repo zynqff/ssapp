@@ -27,7 +27,7 @@ class _App extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final themeState = ref.watch(themeProvider);
+    final themeState = ref.watch(themeNotifierProvider);
     final accent = themeState.accent;
     return MaterialApp(
       title: 'Сборник Стихов',
