@@ -25,152 +25,123 @@ class RecommendationsScreen extends ConsumerWidget {
         child: state.when(
           loading: () => const Center(child: CircularProgressIndicator()),
           error: (e, _) => Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(Icons.wifi_off_outlined, size: 48, color: cs.onSurfaceVariant.withOpacity(0.4)),
-                const SizedBox(height: 12),
-                Text('Не удалось загрузить',
-                    style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant)),
-                const SizedBox(height: 16),
-                FilledButton.tonal(
-                  onPressed: () => ref.refresh(recommendationsProvider),
-                  child: const Text('Повторить'),
-                ),
-              ],
-            ),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Icon(Icons.wifi_off_outlined, size: 48,
+                  color: cs.onSurfaceVariant.withOpacity(0.4)),
+              const SizedBox(height: 12),
+              Text('Не удалось загрузить',
+                  style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant)),
+              const SizedBox(height: 16),
+              FilledButton.tonal(
+                onPressed: () => ref.refresh(recommendationsProvider),
+                child: const Text('Повторить'),
+              ),
+            ]),
           ),
           data: (data) => RefreshIndicator(
             onRefresh: () async => ref.refresh(recommendationsProvider),
-            child: CustomScrollView(
-              slivers: [
-                // Заголовок
-                SliverToBoxAdapter(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
-                    child: Text(
-                      'Открытия',
+            child: CustomScrollView(slivers: [
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 8),
+                  child: Text('Открытия',
                       style: GoogleFonts.playfairDisplay(
-                        fontSize: 32,
-                        fontWeight: FontWeight.w700,
-                        color: cs.onSurface,
-                      ),
+                          fontSize: 32,
+                          fontWeight: FontWeight.w700,
+                          color: cs.onSurface)),
+                ),
+              ),
+
+              // Empty state
+              if (data.poemOfDay == null &&
+                  data.topLibraries.isEmpty &&
+                  data.popularPoems.isEmpty)
+                SliverFillRemaining(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(mainAxisSize: MainAxisSize.min, children: [
+                        Icon(Icons.auto_awesome_outlined,
+                            size: 64,
+                            color: cs.onSurfaceVariant.withOpacity(0.3)),
+                        const SizedBox(height: 16),
+                        Text('Пока здесь пусто',
+                            style: GoogleFonts.playfairDisplay(
+                                fontSize: 20,
+                                fontWeight: FontWeight.w600,
+                                color: cs.onSurfaceVariant)),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Публикуй библиотеки и добавляй стихи —\nони появятся в рекомендациях',
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.notoSerif(
+                              fontSize: 13,
+                              color: cs.onSurfaceVariant.withOpacity(0.7),
+                              fontStyle: FontStyle.italic),
+                        ),
+                      ]),
                     ),
                   ),
                 ),
 
-                // Пусто
-                if (data.poemOfDay == null && data.topLibraries.isEmpty && data.popularPoems.isEmpty)
-                  SliverFillRemaining(
-                    child: Center(
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(mainAxisSize: MainAxisSize.min, children: [
-                          Icon(Icons.auto_awesome_outlined, size: 64,
-                              color: cs.onSurfaceVariant.withOpacity(0.3)),
-                          const SizedBox(height: 16),
-                          Text('Пока здесь пусто',
-                              style: GoogleFonts.playfairDisplay(
-                                  fontSize: 20, fontWeight: FontWeight.w600,
-                                  color: cs.onSurfaceVariant)),
-                          const SizedBox(height: 8),
-                          Text('Публикуй библиотеки и добавляй стихи —\nони появятся в рекомендациях',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.notoSerif(fontSize: 13,
-                                  color: cs.onSurfaceVariant.withOpacity(0.7),
-                                  fontStyle: FontStyle.italic)),
-                        ]),
-                      ),
-                    ),
-                  ),
+              // Стих дня
+              if (data.poemOfDay != null)
+                SliverToBoxAdapter(
+                    child: _PoemOfDayCard(poem: data.poemOfDay!)),
 
-                // Стих дня
-                if (data.poemOfDay != null)
-                  SliverToBoxAdapter(
-                    child: _PoemOfDayCard(poem: data.poemOfDay!),
-                  ),
-
-                // Топ библиотек
-                if (data.topLibraries.isNotEmpty) ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-                      child: Text(
-                        'Популярные библиотеки',
+              // Топ библиотек
+              if (data.topLibraries.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                    child: Text('Популярные библиотеки',
                         style: GoogleFonts.playfairDisplay(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
-                        ),
+                            fontSize: 20, fontWeight: FontWeight.w600,
+                            color: cs.onSurface)),
+                  ),
+                ),
+                SliverToBoxAdapter(
+                  child: SizedBox(
+                    height: 180,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: data.topLibraries.length,
+                      itemBuilder: (ctx, i) => _LibraryCard(
+                        library: data.topLibraries[i],
+                        onTap: () => Navigator.push(context,
+                            MaterialPageRoute(builder: (_) =>
+                                LibraryDetailScreen(
+                                    libraryId: data.topLibraries[i].id))),
                       ),
                     ),
                   ),
-                  SliverToBoxAdapter(
-                    child: SizedBox(
-                      height: 160,
-                      child: ListView.builder(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        itemCount: data.topLibraries.length,
-                        itemBuilder: (ctx, i) => _LibraryCard(
-                          library: data.topLibraries[i],
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => LibraryDetailScreen(
-                                  libraryId: data.topLibraries[i].id),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-
-                // Популярные стихи
-                if (data.popularPoems.isNotEmpty) ...[
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
-                      child: Text(
-                        'Часто добавляют',
-                        style: GoogleFonts.playfairDisplay(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                          color: cs.onSurface,
-                        ),
-                      ),
-                    ),
-                  ),
-                  SliverList(
-                    delegate: SliverChildBuilderDelegate(
-                      (ctx, i) {
-                        final poem = data.popularPoems[i];
-                        return _PopularPoemTile(
-                          poem: poem,
-                          onAddToLibrary: () async {
-                            final err = await ref
-                                .read(myLibraryProvider.notifier)
-                                .addPoem(poem.id);
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                SnackBar(
-                                  content: Text(err ?? 'Добавлено в библиотеку'),
-                                  behavior: SnackBarBehavior.floating,
-                                ),
-                              );
-                            }
-                          },
-                        );
-                      },
-                      childCount: data.popularPoems.length,
-                    ),
-                  ),
-                ],
-
-                const SliverToBoxAdapter(child: SizedBox(height: 24)),
+                ),
               ],
-            ),
+
+              // Популярные стихи
+              if (data.popularPoems.isNotEmpty) ...[
+                SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                    child: Text('Часто добавляют',
+                        style: GoogleFonts.playfairDisplay(
+                            fontSize: 20, fontWeight: FontWeight.w600,
+                            color: cs.onSurface)),
+                  ),
+                ),
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (ctx, i) => _PopularPoemCard(
+                      poem: data.popularPoems[i],
+                    ),
+                    childCount: data.popularPoems.length,
+                  ),
+                ),
+              ],
+
+              const SliverToBoxAdapter(child: SizedBox(height: 24)),
+            ]),
           ),
         ),
       ),
@@ -198,56 +169,37 @@ class _PoemOfDayCard extends StatelessWidget {
         ),
         child: InkWell(
           borderRadius: BorderRadius.circular(20),
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => PoemDetailScreen(poem: poem)),
-          ),
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => PoemDetailScreen(poem: poem))),
           child: Padding(
             padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.wb_sunny_outlined, size: 16, color: cs.primary),
-                    const SizedBox(width: 6),
-                    Text(
-                      'Стих дня',
-                      style: GoogleFonts.notoSerif(
-                          fontSize: 12,
-                          color: cs.primary,
-                          fontStyle: FontStyle.italic),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  poem.title,
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Row(children: [
+                Icon(Icons.wb_sunny_outlined, size: 16, color: cs.primary),
+                const SizedBox(width: 6),
+                Text('Стих дня',
+                    style: GoogleFonts.notoSerif(
+                        fontSize: 12, color: cs.primary,
+                        fontStyle: FontStyle.italic)),
+              ]),
+              const SizedBox(height: 10),
+              Text(poem.title,
                   style: GoogleFonts.playfairDisplay(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: cs.onSurface,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  poem.author,
-                  style: GoogleFonts.notoSerif(
-                      fontSize: 13, color: cs.primary),
-                ),
-                const SizedBox(height: 10),
-                Text(
-                  poem.text.split('\n').take(3).join('\n'),
-                  maxLines: 3,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.notoSerif(
-                    fontSize: 13,
-                    color: cs.onSurfaceVariant,
-                    fontStyle: FontStyle.italic,
-                  ),
-                ),
-              ],
-            ),
+                      fontSize: 20, fontWeight: FontWeight.w700,
+                      color: cs.onSurface)),
+              const SizedBox(height: 4),
+              Text(poem.author,
+                  style: GoogleFonts.notoSerif(fontSize: 13, color: cs.primary)),
+              const SizedBox(height: 10),
+              Text(
+                poem.text.split('\n').take(3).join('\n'),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.notoSerif(
+                    fontSize: 13, color: cs.onSurfaceVariant,
+                    fontStyle: FontStyle.italic),
+              ),
+            ]),
           ),
         ),
       ),
@@ -276,69 +228,137 @@ class _LibraryCard extends StatelessWidget {
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: cs.outlineVariant),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(Icons.collections_bookmark_outlined,
-                color: cs.primary, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              library.name,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(Icons.collections_bookmark_outlined, color: cs.primary, size: 28),
+          const SizedBox(height: 8),
+          Text(library.name,
+              maxLines: 2, overflow: TextOverflow.ellipsis,
               style: GoogleFonts.playfairDisplay(
-                  fontSize: 14, fontWeight: FontWeight.w600),
-            ),
-            const Spacer(),
-            Row(
-              children: [
-                Icon(Icons.favorite_outline, size: 13, color: cs.onSurfaceVariant),
-                const SizedBox(width: 4),
-                Text('${library.likesCount}',
-                    style: GoogleFonts.notoSerif(
-                        fontSize: 12, color: cs.onSurfaceVariant)),
-              ],
-            ),
-          ],
-        ),
+                  fontSize: 14, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 4),
+          Text('by ${library.owner}',
+              maxLines: 1, overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.notoSerif(
+                  fontSize: 11, color: cs.onSurfaceVariant)),
+          const Spacer(),
+          Row(children: [
+            Icon(Icons.favorite_outline, size: 13, color: cs.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text('${library.likesCount}',
+                style: GoogleFonts.notoSerif(
+                    fontSize: 12, color: cs.onSurfaceVariant)),
+            const SizedBox(width: 10),
+            Icon(Icons.collections_bookmark_outlined,
+                size: 13, color: cs.onSurfaceVariant),
+            const SizedBox(width: 4),
+            Text('${library.savesCount}',
+                style: GoogleFonts.notoSerif(
+                    fontSize: 12, color: cs.onSurfaceVariant)),
+          ]),
+        ]),
       ),
     );
   }
 }
 
-// ── Тайл популярного стиха ────────────────────────────────────────────────────
+// ── Популярный стих — формат как в библиотеке + кнопка добавить ──────────────
 
-class _PopularPoemTile extends StatelessWidget {
+class _PopularPoemCard extends ConsumerWidget {
   final Poem poem;
-  final VoidCallback onAddToLibrary;
-  const _PopularPoemTile(
-      {required this.poem, required this.onAddToLibrary});
+  const _PopularPoemCard({required this.poem});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final preview = poem.text.trim().split('\n')
+        .where((l) => l.trim().isNotEmpty).take(2).join('\n');
+    final lineCount = poem.lineCount > 0
+        ? poem.lineCount
+        : poem.text.trim().split('\n').length;
+
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-      child: Card(
-        elevation: 0,
+      child: Material(
         color: cs.surfaceContainerHighest,
-        shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
           borderRadius: BorderRadius.circular(14),
-          side: BorderSide(color: cs.outlineVariant),
-        ),
-        child: ListTile(
-          contentPadding:
-              const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          title: Text(poem.title,
-              style: GoogleFonts.playfairDisplay(
-                  fontWeight: FontWeight.w600, fontSize: 14)),
-          subtitle: Text(poem.author,
-              style: GoogleFonts.notoSerif(
-                  fontSize: 12, color: cs.primary)),
-          trailing: IconButton(
-            icon: Icon(Icons.add, color: cs.primary),
-            onPressed: onAddToLibrary,
-            tooltip: 'Добавить в библиотеку',
+          onTap: () => Navigator.push(context,
+              MaterialPageRoute(builder: (_) => PoemDetailScreen(poem: poem))),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: cs.outlineVariant),
+            ),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Expanded(child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(poem.title,
+                    style: GoogleFonts.playfairDisplay(
+                        fontWeight: FontWeight.w600, fontSize: 14)),
+                const SizedBox(height: 2),
+                Text(poem.author,
+                    style: GoogleFonts.notoSerif(
+                        fontSize: 12, color: cs.primary)),
+                if (preview.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(preview,
+                      maxLines: 2, overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.notoSerif(
+                          fontSize: 12, color: cs.onSurfaceVariant,
+                          fontStyle: FontStyle.italic)),
+                ],
+              ])),
+              const SizedBox(width: 8),
+              // Правая колонка: добавить + строки
+              Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+                GestureDetector(
+                  onTap: () async {
+                    final confirmed = await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: cs.surface,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18)),
+                        title: Text('Добавить стих?',
+                            style: GoogleFonts.playfairDisplay(
+                                fontWeight: FontWeight.w600)),
+                        content: Text('"${poem.title}"',
+                            style: GoogleFonts.notoSerif(
+                                color: cs.onSurfaceVariant)),
+                        actions: [
+                          TextButton(
+                              onPressed: () => Navigator.pop(ctx, false),
+                              child: const Text('Нет')),
+                          FilledButton(
+                              onPressed: () => Navigator.pop(ctx, true),
+                              child: const Text('Добавить')),
+                        ],
+                      ),
+                    );
+                    if (confirmed == true && context.mounted) {
+                      final err = await ref
+                          .read(myLibraryProvider.notifier)
+                          .addPoem(poem.id);
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text(err ?? 'Добавлено в библиотеку'),
+                          behavior: SnackBarBehavior.floating,
+                        ));
+                      }
+                    }
+                  },
+                  child: Icon(Icons.add_circle_outline,
+                      color: cs.primary, size: 26),
+                ),
+                const SizedBox(height: 4),
+                Text('$lineCount стр.',
+                    style: GoogleFonts.notoSerif(
+                        fontSize: 11, color: cs.onSurfaceVariant)),
+              ]),
+            ]),
           ),
         ),
       ),
