@@ -5,7 +5,7 @@ class UserLibrary {
   final String owner;
   final String name;
   final String description;
-  final String status; // pending | published | rejected
+  final String status;
   final String rejectReason;
   final int likesCount;
   final int savesCount;
@@ -47,6 +47,7 @@ class LibraryPoem {
   final int lineCount;
   final bool isRead;
   final bool isCustom;
+  final bool isPinned;
 
   const LibraryPoem({
     required this.id,
@@ -58,31 +59,41 @@ class LibraryPoem {
     required this.lineCount,
     required this.isRead,
     required this.isCustom,
+    this.isPinned = false,
   });
 
-  factory LibraryPoem.fromJson(Map<String, dynamic> j) => LibraryPoem(
-        id: (j['id'] as num).toInt(),
-        libraryId: (j['library_id'] as num).toInt(),
-        poemId: (j['poem_id'] as num?)?.toInt(),
-        title: j['title'] as String? ?? '',
-        author: j['author'] as String? ?? '',
-        text: j['text'] as String? ?? '',
-        lineCount: (j['line_count'] as num?)?.toInt() ?? 0,
-        isRead: j['is_read'] as bool? ?? false,
-        isCustom: j['is_custom'] as bool? ?? false,
+  factory LibraryPoem.fromJson(Map<String, dynamic> j) {
+    final text = j['text'] as String? ?? '';
+    final rawCount = (j['line_count'] as num?)?.toInt() ?? 0;
+    return LibraryPoem(
+      id: (j['id'] as num).toInt(),
+      libraryId: (j['library_id'] as num).toInt(),
+      poemId: (j['poem_id'] as num?)?.toInt(),
+      title: j['title'] as String? ?? '',
+      author: j['author'] as String? ?? '',
+      text: text,
+      lineCount: rawCount > 0
+          ? rawCount
+          : text.trim().isEmpty ? 0 : text.trim().split('\n').length,
+      isRead: j['is_read'] as bool? ?? false,
+      isCustom: j['is_custom'] as bool? ?? false,
+      isPinned: j['is_pinned'] as bool? ?? false,
+    );
+  }
+
+  LibraryPoem copyWith({bool? isRead, bool? isPinned}) => LibraryPoem(
+        id: id, libraryId: libraryId, poemId: poemId,
+        title: title, author: author, text: text, lineCount: lineCount,
+        isRead: isRead ?? this.isRead, isCustom: isCustom,
+        isPinned: isPinned ?? this.isPinned,
       );
 
-  LibraryPoem copyWith({bool? isRead}) => LibraryPoem(
-        id: id,
-        libraryId: libraryId,
-        poemId: poemId,
-        title: title,
-        author: author,
-        text: text,
-        lineCount: lineCount,
-        isRead: isRead ?? this.isRead,
-        isCustom: isCustom,
-      );
+  String get preview {
+    final lines = text.trim().split('\n').where((l) => l.trim().isNotEmpty).toList();
+    if (lines.isEmpty) return '';
+    if (lines.length == 1) return lines[0];
+    return '${lines[0]}\n${lines[1]}';
+  }
 }
 
 class LibraryState {
@@ -108,15 +119,26 @@ class LibraryState {
       );
 
   LibraryState copyWith({
-    UserLibrary? library,
-    List<LibraryPoem>? poems,
-    bool? isLiked,
-    bool? isSaved,
-  }) =>
-      LibraryState(
-        library: library ?? this.library,
-        poems: poems ?? this.poems,
-        isLiked: isLiked ?? this.isLiked,
-        isSaved: isSaved ?? this.isSaved,
+    UserLibrary? library, List<LibraryPoem>? poems,
+    bool? isLiked, bool? isSaved,
+  }) => LibraryState(
+        library: library ?? this.library, poems: poems ?? this.poems,
+        isLiked: isLiked ?? this.isLiked, isSaved: isSaved ?? this.isSaved,
       );
+}
+
+enum SortDir { asc, desc }
+enum LibrarySortBy { added, title, author, length, read, unread }
+
+extension LibrarySortByLabel on LibrarySortBy {
+  String get label {
+    switch (this) {
+      case LibrarySortBy.added:  return 'По добавлению';
+      case LibrarySortBy.title:  return 'По названию';
+      case LibrarySortBy.author: return 'По автору';
+      case LibrarySortBy.length: return 'По длине';
+      case LibrarySortBy.read:   return 'Прочитанные';
+      case LibrarySortBy.unread: return 'Непрочитанные';
+    }
+  }
 }
