@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ЭТА СТРОКА ОБЯЗАТЕЛЬНА — связывает с сгенерированным файлом
 part 'theme_provider.g.dart';
 
 // ── Accent color options ──────────────────────────────────────────────────────
@@ -42,13 +41,11 @@ class ThemeState {
 }
 
 // ── Notifier с @riverpod ─────────────────────────────────────────────────────
-
+// ВАЖНО: класс называется ThemeNotifier, а не Theme
 @riverpod
-class Theme extends _$Theme {
+class ThemeNotifier extends _$ThemeNotifier {
   @override
   ThemeState build() {
-    // build() вызывается один раз при создании провайдера
-    // Здесь вместо конструктора ThemeNotifier()
     _load();
     return const ThemeState();
   }
