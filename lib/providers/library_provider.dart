@@ -16,6 +16,9 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
 
   final _api = ApiService();
 
+  // Локальные пины (хранятся только в памяти, макс 3)
+  final Set<int> _pinnedIds = {};
+
   Future<void> load() async {
     state = const AsyncValue.loading();
     try {
@@ -25,12 +28,17 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
       );
       if (data == null) {
         state = AsyncValue.error(
-          'Не удалось загрузить библиотеку. Проверь интернет или запусти SQL миграцию.',
+          'Не удалось загрузить библиотеку. Проверь интернет.',
           StackTrace.current,
         );
         return;
       }
-      state = AsyncValue.data(LibraryState.fromJson(data));
+      final libState = LibraryState.fromJson(data);
+      // Восстанавливаем пины
+      final poems = libState.poems.map((p) =>
+        p.copyWith(isPinned: _pinnedIds.contains(p.id))
+      ).toList();
+      state = AsyncValue.data(libState.copyWith(poems: poems));
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -53,10 +61,23 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     return err;
   }
 
+  /// Удалить одно стихотворение с подтверждением (подтверждение в UI)
   Future<String?> removePoem(int entryId) async {
     final err = await _api.removePoemFromLibrary(entryId);
-    if (err == null) await load();
+    if (err == null) {
+      _pinnedIds.remove(entryId);
+      await load();
+    }
     return err;
+  }
+
+  /// Удалить несколько стихотворений сразу
+  Future<void> removePoems(List<int> entryIds) async {
+    for (final id in entryIds) {
+      await _api.removePoemFromLibrary(id);
+      _pinnedIds.remove(id);
+    }
+    await load();
   }
 
   Future<void> toggleRead(int entryId) async {
@@ -69,8 +90,31 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
       return p;
     }).toList();
     state = AsyncValue.data(current.copyWith(poems: updated));
-
     await _api.toggleLibraryPoemRead(entryId);
+  }
+
+  /// Закрепить/открепить стих (локально, макс 3)
+  String? togglePin(int entryId) {
+    final current = state.value;
+    if (current == null) return null;
+
+    final poem = current.poems.firstWhere((p) => p.id == entryId,
+        orElse: () => current.poems.first);
+
+    if (poem.isPinned) {
+      _pinnedIds.remove(entryId);
+    } else {
+      if (_pinnedIds.length >= 3) {
+        return 'Максимум 3 закреплённых стиха. Открепите один из уже закреплённых.';
+      }
+      _pinnedIds.add(entryId);
+    }
+
+    final updated = current.poems.map((p) =>
+      p.copyWith(isPinned: _pinnedIds.contains(p.id))
+    ).toList();
+    state = AsyncValue.data(current.copyWith(poems: updated));
+    return null;
   }
 
   Future<String?> updateInfo(String name, String description) async {
@@ -85,31 +129,54 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     return result;
   }
 
-  // Сортировка локально
-  List<LibraryPoem> sortedPoems({
-    required String sortBy, // 'added' | 'author' | 'length' | 'read' | 'unread'
+  /// Отсортированный список с закреплёнными наверху
+  List<LibraryPoem> sorted({
+    required LibrarySortBy sortBy,
+    required SortDir dir,
+    bool filterRead = false,
+    bool filterUnread = false,
   }) {
-    final poems = List<LibraryPoem>.from(state.value?.poems ?? []);
+    var poems = List<LibraryPoem>.from(state.value?.poems ?? []);
+
+    // Фильтр по прочитанности
+    if (filterRead) poems = poems.where((p) => p.isRead).toList();
+    if (filterUnread) poems = poems.where((p) => !p.isRead).toList();
+
+    final pinned = poems.where((p) => p.isPinned).toList();
+    final rest = poems.where((p) => !p.isPinned).toList();
+
+    int Function(LibraryPoem, LibraryPoem) comparator;
     switch (sortBy) {
-      case 'author':
-        poems.sort((a, b) => a.author.compareTo(b.author));
-      case 'length':
-        poems.sort((a, b) => a.lineCount.compareTo(b.lineCount));
-      case 'read':
-        poems.sort((a, b) {
+      case LibrarySortBy.title:
+        comparator = (a, b) => a.title.compareTo(b.title);
+      case LibrarySortBy.author:
+        comparator = (a, b) => a.author.compareTo(b.author);
+      case LibrarySortBy.length:
+        comparator = (a, b) => a.lineCount.compareTo(b.lineCount);
+      case LibrarySortBy.read:
+        comparator = (a, b) {
           if (a.isRead && !b.isRead) return -1;
           if (!a.isRead && b.isRead) return 1;
           return 0;
-        });
-      case 'unread':
-        poems.sort((a, b) {
+        };
+      case LibrarySortBy.unread:
+        comparator = (a, b) {
           if (!a.isRead && b.isRead) return -1;
           if (a.isRead && !b.isRead) return 1;
           return 0;
-        });
-      default: // 'added' — порядок добавления, уже отсортирован
-        break;
+        };
+      default:
+        comparator = (a, b) => a.id.compareTo(b.id);
     }
-    return poems;
+
+    rest.sort(comparator);
+    if (dir == SortDir.desc &&
+        sortBy != LibrarySortBy.read &&
+        sortBy != LibrarySortBy.unread) {
+      rest = rest.reversed.toList();
+    }
+
+    // Закреплённые всегда наверху
+    return [...pinned, ...rest];
   }
 }
