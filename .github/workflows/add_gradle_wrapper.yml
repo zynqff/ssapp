@@ -19,6 +19,11 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'
+
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
@@ -27,7 +32,7 @@ jobs:
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
           echo "flutter.sdk=$FLUTTER_ROOT" >> android/local.properties
         env:
-          FLUTTER_ROOT: /opt/hostedtoolcache/flutter/stable-3.41.4-x64/flutter
+          FLUTTER_ROOT: ${{ env.FLUTTER_ROOT }}
 
       - name: Generate gradle wrapper
         run: |
