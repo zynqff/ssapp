@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+// ЭТА СТРОКА ОБЯЗАТЕЛЬНА — связывает с сгенерированным файлом
+part 'theme_provider.g.dart';
 
 // ── Accent color options ──────────────────────────────────────────────────────
 
@@ -25,7 +29,8 @@ const accentOptions = [
 
 class ThemeState {
   final ThemeMode mode;
-  final int accentIndex; // index into accentOptions
+  final int accentIndex;
+  
   const ThemeState({this.mode = ThemeMode.dark, this.accentIndex = 0});
 
   Color get accent => accentOptions[accentIndex].color;
@@ -36,17 +41,23 @@ class ThemeState {
       );
 }
 
-// ── Notifier ──────────────────────────────────────────────────────────────────
+// ── Notifier с @riverpod ─────────────────────────────────────────────────────
 
-class ThemeNotifier extends StateNotifier<ThemeState> {
-  ThemeNotifier() : super(const ThemeState()) {
+@riverpod
+class Theme extends _$Theme {
+  @override
+  ThemeState build() {
+    // build() вызывается один раз при создании провайдера
+    // Здесь вместо конструктора ThemeNotifier()
     _load();
+    return const ThemeState();
   }
 
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
-    final modeIndex = prefs.getInt('theme_mode') ?? 1; // 1 = dark
+    final modeIndex = prefs.getInt('theme_mode') ?? 1;
     final accentIndex = prefs.getInt('theme_accent') ?? 0;
+    
     state = ThemeState(
       mode: ThemeMode.values[modeIndex.clamp(0, 2)],
       accentIndex: accentIndex.clamp(0, accentOptions.length - 1),
@@ -65,7 +76,3 @@ class ThemeNotifier extends StateNotifier<ThemeState> {
     await prefs.setInt('theme_accent', index);
   }
 }
-
-final themeProvider = StateNotifierProvider<ThemeNotifier, ThemeState>(
-  (_) => ThemeNotifier(),
-);
