@@ -187,7 +187,7 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
     final poemsAsync = ref.watch(poemsProvider);
     final filtered = ref.watch(filteredPoemsProvider);
     final isLoggedIn = user != null;
-    final accent = ref.watch(themeProvider).accent;
+    final accent = ref.watch(themeNotifierProvider).accent;
     final bg = Theme.of(context).scaffoldBackgroundColor;
 
     final config = ref.watch(configProvider).valueOrNull;
@@ -251,7 +251,6 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
                           ),
                         ),
                         const SizedBox(width: 8),
-                        // Только кнопка поиска — AI и профиль в BottomNav
                         _HeaderIcon(
                           icon: _showSearch
                               ? Icons.close_rounded
@@ -331,8 +330,6 @@ class _PoemsScreenState extends ConsumerState<PoemsScreen>
   }
 }
 
-// ── Header icon ───────────────────────────────────────────────────────────────
-
 class _HeaderIcon extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -355,8 +352,6 @@ class _HeaderIcon extends StatelessWidget {
     );
   }
 }
-
-// ── Pill tabs ─────────────────────────────────────────────────────────────────
 
 class _PillTabs extends StatelessWidget {
   final List<String> labels;
@@ -408,8 +403,6 @@ class _PillTabs extends StatelessWidget {
   }
 }
 
-// ── Poem list ─────────────────────────────────────────────────────────────────
-
 class _PoemList extends ConsumerWidget {
   final List<Poem> poems;
   final dynamic user;
@@ -423,7 +416,7 @@ class _PoemList extends ConsumerWidget {
         message: 'Ничего не найдено',
       );
     }
-    final accent = ref.watch(themeProvider).accent;
+    final accent = ref.watch(themeNotifierProvider).accent;
     return AnimationLimiter(
       child: RefreshIndicator(
         color: accent,
@@ -457,8 +450,6 @@ class _PoemList extends ConsumerWidget {
     );
   }
 }
-
-// ── Empty state ───────────────────────────────────────────────────────────────
 
 class _EmptyState extends StatelessWidget {
   final IconData icon;
