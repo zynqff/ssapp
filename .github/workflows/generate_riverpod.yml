@@ -1,0 +1,50 @@
+name: Generate Riverpod Files
+
+on:
+  push:
+    paths:
+      - 'lib/**/*.dart'           # когда меняется любой dart файл
+      - '!lib/**/*.g.dart'        # НЕ запускаем если меняется .g.dart (чтобы не было цикла)
+    branches:
+      - main                       # или твоя основная ветка
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write              # нужно чтобы коммитить обратно
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.41.4'  # или твоя версия
+          
+      - name: Install dependencies
+        run: flutter pub get
+        
+      - name: Run generator
+        run: dart run build_runner build --delete-conflicting-outputs
+        
+      - name: Check for changes
+        id: check_changes
+        run: |
+          git add lib/**/*.g.dart
+          if git diff --cached --quiet; then
+            echo "has_changes=false" >> $GITHUB_OUTPUT
+          else
+            echo "has_changes=true" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Commit generated files
+        if: steps.check_changes.outputs.has_changes == 'true'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -m "chore: regenerate riverpod files"
+          git push
