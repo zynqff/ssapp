@@ -9,11 +9,11 @@ build/
 *.iml
 
 # Android
-android/local.properties
+# android/local.properties      ← ЗАКОММЕНТИРОВАНО
+# android/gradlew               ← ЗАКОММЕНТИРОВАНО
+# android/gradlew.bat           ← ЗАКОММЕНТИРОВАНО
 android/.gradle
 android/captures/
-android/gradlew
-android/gradlew.bat
 android/key.properties
 **/*.keystore
 **/*.jks
