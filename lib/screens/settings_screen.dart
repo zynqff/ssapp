@@ -313,8 +313,8 @@ class _AppearanceCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-    final themeState = ref.watch(themeProvider);
-    final notifier = ref.read(themeProvider.notifier);
+    final themeState = ref.watch(themeNotifierProvider);
+    final notifier = ref.read(themeNotifierProvider.notifier);
     final isDark = themeState.mode == ThemeMode.dark;
 
     return _SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
