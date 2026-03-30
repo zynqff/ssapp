@@ -11,6 +11,7 @@ dependencies:
     sdk: flutter
   cupertino_icons: ^1.0.8
   flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5        # ← ДОБАВЛЕНО для @riverpod аннотаций
   dio: ^5.4.3
   sqflite: ^2.3.3
   path: ^1.9.0
@@ -30,6 +31,8 @@ dev_dependencies:
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.13.1
   sqflite_common_ffi: ^2.3.3
+  build_runner: ^2.4.0              # ← ДОБАВЛЕНО для запуска генерации
+  riverpod_generator: ^2.4.0        # ← ДОБАВЛЕНО для генерации провайдеров
 
 flutter_launcher_icons:
   android: true
