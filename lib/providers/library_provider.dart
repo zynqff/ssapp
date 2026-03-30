@@ -143,7 +143,7 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     if (filterUnread) poems = poems.where((p) => !p.isRead).toList();
 
     final pinned = poems.where((p) => p.isPinned).toList();
-    final rest = poems.where((p) => !p.isPinned).toList();
+    var rest = poems.where((p) => !p.isPinned).toList();
 
     int Function(LibraryPoem, LibraryPoem) comparator;
     switch (sortBy) {
