@@ -16,9 +16,6 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
 
   final _api = ApiService();
 
-  // Локальные пины (хранятся только в памяти, макс 3)
-  final Set<int> _pinnedIds = {};
-
   Future<void> load() async {
     state = const AsyncValue.loading();
     try {
@@ -33,12 +30,7 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
         );
         return;
       }
-      final libState = LibraryState.fromJson(data);
-      // Восстанавливаем пины
-      final poems = libState.poems.map((p) =>
-        p.copyWith(isPinned: _pinnedIds.contains(p.id))
-      ).toList();
-      state = AsyncValue.data(libState.copyWith(poems: poems));
+      state = AsyncValue.data(LibraryState.fromJson(data));
     } catch (e, st) {
       state = AsyncValue.error(e, st);
     }
@@ -61,21 +53,15 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     return err;
   }
 
-  /// Удалить одно стихотворение с подтверждением (подтверждение в UI)
   Future<String?> removePoem(int entryId) async {
     final err = await _api.removePoemFromLibrary(entryId);
-    if (err == null) {
-      _pinnedIds.remove(entryId);
-      await load();
-    }
+    if (err == null) await load();
     return err;
   }
 
-  /// Удалить несколько стихотворений сразу
   Future<void> removePoems(List<int> entryIds) async {
     for (final id in entryIds) {
       await _api.removePoemFromLibrary(id);
-      _pinnedIds.remove(id);
     }
     await load();
   }
@@ -93,27 +79,26 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     await _api.toggleLibraryPoemRead(entryId);
   }
 
-  /// Закрепить/открепить стих (локально, макс 3)
-  String? togglePin(int entryId) {
-    final current = state.value;
-    if (current == null) return null;
+  /// Закрепить/открепить через API (персистентно, макс 3)
+  Future<String?> togglePin(int entryId) async {
+    final res = await _api.toggleLibraryPoemPin(entryId);
+    if (res == null) return 'Ошибка';
 
-    final poem = current.poems.firstWhere((p) => p.id == entryId,
-        orElse: () => current.poems.first);
-
-    if (poem.isPinned) {
-      _pinnedIds.remove(entryId);
-    } else {
-      if (_pinnedIds.length >= 3) {
-        return 'Максимум 3 закреплённых стиха. Открепите один из уже закреплённых.';
-      }
-      _pinnedIds.add(entryId);
+    // Если сервер вернул ошибку лимита
+    if (res['error'] != null) {
+      return res['error'] as String;
     }
 
-    final updated = current.poems.map((p) =>
-      p.copyWith(isPinned: _pinnedIds.contains(p.id))
-    ).toList();
-    state = AsyncValue.data(current.copyWith(poems: updated));
+    // Оптимистичное обновление
+    final current = state.value;
+    if (current != null) {
+      final isPinned = res['is_pinned'] as bool? ?? false;
+      final updated = current.poems.map((p) {
+        if (p.id == entryId) return p.copyWith(isPinned: isPinned);
+        return p;
+      }).toList();
+      state = AsyncValue.data(current.copyWith(poems: updated));
+    }
     return null;
   }
 
@@ -129,54 +114,51 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     return result;
   }
 
+  Future<String?> deleteLibrary() async {
+    final err = await _api.deleteMyLibrary();
+    if (err == null) {
+      // Перезагружаем — сервер создаст новую пустую библиотеку
+      await load();
+    }
+    return err;
+  }
+
   /// Отсортированный список с закреплёнными наверху
   List<LibraryPoem> sorted({
     required LibrarySortBy sortBy,
     required SortDir dir,
-    bool filterRead = false,
-    bool filterUnread = false,
   }) {
     var poems = List<LibraryPoem>.from(state.value?.poems ?? []);
 
     // Фильтр по прочитанности
-    if (filterRead) poems = poems.where((p) => p.isRead).toList();
-    if (filterUnread) poems = poems.where((p) => !p.isRead).toList();
+    if (sortBy == LibrarySortBy.read) {
+      poems = poems.where((p) => p.isRead).toList();
+    } else if (sortBy == LibrarySortBy.unread) {
+      poems = poems.where((p) => !p.isRead).toList();
+    }
 
     final pinned = poems.where((p) => p.isPinned).toList();
     var rest = poems.where((p) => !p.isPinned).toList();
 
-    int Function(LibraryPoem, LibraryPoem) comparator;
+    int Function(LibraryPoem, LibraryPoem) cmp;
     switch (sortBy) {
       case LibrarySortBy.title:
-        comparator = (a, b) => a.title.compareTo(b.title);
+        cmp = (a, b) => a.title.compareTo(b.title);
       case LibrarySortBy.author:
-        comparator = (a, b) => a.author.compareTo(b.author);
+        cmp = (a, b) => a.author.compareTo(b.author);
       case LibrarySortBy.length:
-        comparator = (a, b) => a.lineCount.compareTo(b.lineCount);
-      case LibrarySortBy.read:
-        comparator = (a, b) {
-          if (a.isRead && !b.isRead) return -1;
-          if (!a.isRead && b.isRead) return 1;
-          return 0;
-        };
-      case LibrarySortBy.unread:
-        comparator = (a, b) {
-          if (!a.isRead && b.isRead) return -1;
-          if (a.isRead && !b.isRead) return 1;
-          return 0;
-        };
+        cmp = (a, b) => a.lineCount.compareTo(b.lineCount);
       default:
-        comparator = (a, b) => a.id.compareTo(b.id);
+        cmp = (a, b) => a.id.compareTo(b.id);
     }
 
-    rest.sort(comparator);
+    rest.sort(cmp);
     if (dir == SortDir.desc &&
         sortBy != LibrarySortBy.read &&
         sortBy != LibrarySortBy.unread) {
       rest = rest.reversed.toList();
     }
 
-    // Закреплённые всегда наверху
     return [...pinned, ...rest];
   }
 }
