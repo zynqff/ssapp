@@ -191,8 +191,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                             });
                           },
                           onToggleRead: () => notifier.toggleRead(poems[i].id),
-                          onTogglePin: () {
-                            final err = notifier.togglePin(poems[i].id);
+                          onTogglePin: () async {
+                            final err = await notifier.togglePin(poems[i].id);
                             if (err != null && mounted) {
                               ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(content: Text(err)));
@@ -300,6 +300,14 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 _unpublishLibrary(context);
               },
             ),
+          ListTile(
+            leading: Icon(Icons.delete_forever_outlined, color: cs.error),
+            title: Text('Удалить библиотеку', style: TextStyle(color: cs.error)),
+            onTap: () {
+              Navigator.pop(context);
+              _deleteLibrary(context);
+            },
+          ),
           const SizedBox(height: 8),
         ]),
       ),
@@ -349,7 +357,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
   }
 
   void _unpublishLibrary(BuildContext context) async {
-    // Убираем статус published — ставим pending
     final err = await ref.read(myLibraryProvider.notifier)
         .updateInfo(
           ref.read(myLibraryProvider).value?.library.name ?? 'Моя библиотека',
@@ -358,6 +365,39 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err ?? 'Снято с публикации')));
+  }
+
+  void _deleteLibrary(BuildContext context) async {
+    final cs = Theme.of(context).colorScheme;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: cs.surface,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        title: Text('Удалить библиотеку?',
+            style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.w600)),
+        content: Text(
+            'Все стихи будут удалены. Это действие нельзя отменить.',
+            style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant)),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Отмена')),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: FilledButton.styleFrom(backgroundColor: cs.error),
+            child: const Text('Удалить'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed == true && mounted) {
+      final err = await ref.read(myLibraryProvider.notifier).deleteLibrary();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(err ?? 'Библиотека удалена')));
+      }
+    }
   }
 }
 
