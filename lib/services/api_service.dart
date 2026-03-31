@@ -435,6 +435,29 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>?> toggleLibraryPoemPin(int entryId) async {
+    try {
+      final res = await _dio
+          .post('/api/library/mine/poems/$entryId/toggle_pin');
+      return res.data as Map<String, dynamic>;
+    } catch (e) {
+      if (e is DioException) {
+        final msg = _extractError(e);
+        if (msg != null) return {'error': msg};
+      }
+      return null;
+    }
+  }
+
+  Future<String?> deleteMyLibrary() async {
+    try {
+      await _dio.delete('/api/library/mine');
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка удаления';
+    }
+  }
+
   Future<({String? error, String? status})> publishLibrary() async {
     try {
       final res = await _dio.post('/api/library/mine/publish');
