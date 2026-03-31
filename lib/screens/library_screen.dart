@@ -78,8 +78,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
             final poems = notifier.sorted(
               sortBy: _sortBy,
               dir: _dir,
-              filterRead: _sortBy == LibrarySortBy.read,
-              filterUnread: _sortBy == LibrarySortBy.unread,
             );
             return Column(children: [
               // Заголовок
