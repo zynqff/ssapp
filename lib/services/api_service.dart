@@ -1,37 +1,72 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-const String kBaseUrl = String.fromEnvironment(
-  'BASE_URL',
-  defaultValue: 'https://zynqochka-ssback-go.hf.space',
-);
+import 'pinning_service.dart';
+
+// kBaseUrl и dart-define полностью убраны.
+// URL теперь приходит из SecureStorage через PinningService.
 
 const _kTokenKey = 'jwt_token';
 
 class ApiService {
   static final ApiService _i = ApiService._();
   factory ApiService() => _i;
-  ApiService._();
+  ApiService._() {
+    _initDio();
+  }
 
   final _storage = const FlutterSecureStorage();
 
-  late final Dio _dio = Dio(BaseOptions(
-    baseUrl: kBaseUrl,
-    connectTimeout: const Duration(seconds: 30),
-    receiveTimeout: const Duration(seconds: 30),
-    headers: {'Content-Type': 'application/json'},
-  ))
-    ..interceptors.add(InterceptorsWrapper(
+  late final Dio _dio;
+
+  // Публичный геттер нужен config_provider для applyToDio
+  Dio get dio => _dio;
+
+  void _initDio() {
+    _dio = Dio(BaseOptions(
+      // baseUrl не задаём — подставляется динамически в interceptor
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      headers: {'Content-Type': 'application/json'},
+    ));
+
+    _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
+        // ── 1. Подставляем актуальный baseUrl из PinningService ──────────────
+        final apiUrl = PinningService.instance.trustedApiUrl;
+        if (apiUrl == null || apiUrl.isEmpty) {
+          // URL ещё не загружен с GitHub Pages — блокируем запрос
+          debugPrint('[ApiService] ❌ api_url не загружен, запрос отклонён');
+          return handler.reject(
+            DioException(
+              requestOptions: options,
+              error: 'API URL не инициализирован. Проверьте подключение.',
+              type: DioExceptionType.cancel,
+            ),
+          );
+        }
+
+        // Подставляем базовый URL если путь относительный
+        if (!options.uri.isAbsolute) {
+          options.baseUrl = apiUrl;
+        }
+
+        // ── 2. Подставляем JWT токен ─────────────────────────────────────────
         final token = await getToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
         }
+
         handler.next(options);
       },
     ));
 
-  // ── Token ─────────────────────────────────────────────────────────────────
+    // Применяем SSL pinning (validateCertificate)
+    PinningService.instance.applyToDio(_dio);
+  }
+
+  // ── Token ──────────────────────────────────────────────────────────────────
 
   Future<void> saveToken(String token) =>
       _storage.write(key: _kTokenKey, value: token);
@@ -40,7 +75,7 @@ class ApiService {
 
   Future<void> clearToken() => _storage.delete(key: _kTokenKey);
 
-  // ── OTP ───────────────────────────────────────────────────────────────────
+  // ── OTP ────────────────────────────────────────────────────────────────────
 
   Future<String?> sendOtp(String email,
       {String? username, bool isNew = false}) async {
@@ -63,9 +98,9 @@ class ApiService {
         'email': email.trim(),
         'token': code.trim(),
       });
-      final token = res.data['access_token'] as String;
+      final token    = res.data['access_token'] as String;
       final username = res.data['username'] as String;
-      final isAdmin = res.data['is_admin'] as bool? ?? false;
+      final isAdmin  = res.data['is_admin'] as bool? ?? false;
       await saveToken(token);
       return (error: null, token: token, username: username, isAdmin: isAdmin);
     } on DioException catch (e) {
@@ -112,16 +147,16 @@ class ApiService {
     }
   }
 
-  // ── Google ────────────────────────────────────────────────────────────────
+  // ── Google ─────────────────────────────────────────────────────────────────
 
   Future<({String? error, String? token, String? username, bool isAdmin})>
       googleMobileAuth(String idToken) async {
     try {
       final res = await _dio
           .post('/api/google/mobile-auth', data: {'id_token': idToken});
-      final token = res.data['access_token'] as String;
+      final token    = res.data['access_token'] as String;
       final username = res.data['username'] as String;
-      final isAdmin = res.data['is_admin'] as bool? ?? false;
+      final isAdmin  = res.data['is_admin'] as bool? ?? false;
       await saveToken(token);
       return (error: null, token: token, username: username, isAdmin: isAdmin);
     } on DioException catch (e) {
@@ -134,7 +169,7 @@ class ApiService {
     }
   }
 
-  // ── User ──────────────────────────────────────────────────────────────────
+  // ── User ───────────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> getMe() async {
     try {
@@ -204,11 +239,11 @@ class ApiService {
     }
   }
 
-  // ── Poems ─────────────────────────────────────────────────────────────────
+  // ── Poems ──────────────────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>?> fetchPoems() async {
     try {
-      final res = await _dio.get('/api/poems');
+      final res  = await _dio.get('/api/poems');
       final data = res.data as Map<String, dynamic>;
       return List<Map<String, dynamic>>.from(data['poems'] as List);
     } catch (_) {
@@ -216,7 +251,7 @@ class ApiService {
     }
   }
 
-  // ── Toggle ────────────────────────────────────────────────────────────────
+  // ── Toggle ─────────────────────────────────────────────────────────────────
 
   Future<String?> toggleRead(int poemId) async {
     try {
@@ -241,7 +276,7 @@ class ApiService {
     }
   }
 
-  // ── AI ────────────────────────────────────────────────────────────────────
+  // ── AI ─────────────────────────────────────────────────────────────────────
 
   Future<String?> chatWithAI(String prompt) async {
     try {
@@ -269,7 +304,7 @@ class ApiService {
     }
   }
 
-  // ── Admin — стихи ─────────────────────────────────────────────────────────
+  // ── Admin — стихи ──────────────────────────────────────────────────────────
 
   Future<bool> addPoem(String title, String author, String text) async {
     try {
@@ -301,7 +336,7 @@ class ApiService {
     }
   }
 
-  // ── Admin — AI ключи ──────────────────────────────────────────────────────
+  // ── Admin — AI ключи ───────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getAiKeys() async {
     try {
@@ -335,7 +370,7 @@ class ApiService {
     }
   }
 
-  // ── Config ────────────────────────────────────────────────────────────────
+  // ── Config ─────────────────────────────────────────────────────────────────
 
   Future<Map<String, String>?> fetchConfig() async {
     try {
@@ -347,7 +382,7 @@ class ApiService {
     }
   }
 
-  // ── Рекомендации ──────────────────────────────────────────────────────────
+  // ── Рекомендации ───────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> fetchRecommendations() async {
     try {
@@ -358,7 +393,7 @@ class ApiService {
     }
   }
 
-  // ── Библиотека ────────────────────────────────────────────────────────────
+  // ── Библиотека ─────────────────────────────────────────────────────────────
 
   Future<Map<String, dynamic>?> getMyLibrary() async {
     try {
@@ -388,7 +423,6 @@ class ApiService {
     }
   }
 
-  /// Добавить стих из общей БД
   Future<String?> addPoemToLibrary(int poemId) async {
     try {
       await _dio.post('/api/library/mine/poems', data: {'poem_id': poemId});
@@ -398,7 +432,6 @@ class ApiService {
     }
   }
 
-  /// Добавить кастомный стих
   Future<String?> addCustomPoemToLibrary({
     required String title,
     required String author,
@@ -427,8 +460,8 @@ class ApiService {
 
   Future<Map<String, dynamic>?> toggleLibraryPoemRead(int entryId) async {
     try {
-      final res = await _dio
-          .post('/api/library/mine/poems/$entryId/toggle_read');
+      final res =
+          await _dio.post('/api/library/mine/poems/$entryId/toggle_read');
       return res.data as Map<String, dynamic>;
     } catch (_) {
       return null;
@@ -437,8 +470,8 @@ class ApiService {
 
   Future<Map<String, dynamic>?> toggleLibraryPoemPin(int entryId) async {
     try {
-      final res = await _dio
-          .post('/api/library/mine/poems/$entryId/toggle_pin');
+      final res =
+          await _dio.post('/api/library/mine/poems/$entryId/toggle_pin');
       return res.data as Map<String, dynamic>;
     } catch (e) {
       if (e is DioException) {
@@ -467,7 +500,6 @@ class ApiService {
     }
   }
 
-  /// Снять библиотеку с публикации (#2)
   Future<String?> unpublishLibrary() async {
     try {
       await _dio.post('/api/library/mine/unpublish');
@@ -516,8 +548,8 @@ class ApiService {
 
   Future<List<Map<String, dynamic>>> searchLibraries(String query) async {
     try {
-      final res = await _dio.get('/api/library/search',
-          queryParameters: {'q': query});
+      final res = await _dio
+          .get('/api/library/search', queryParameters: {'q': query});
       return List<Map<String, dynamic>>.from(
           (res.data['libraries'] as List));
     } catch (_) {
@@ -525,7 +557,7 @@ class ApiService {
     }
   }
 
-  // ── Admin — модерация ─────────────────────────────────────────────────────
+  // ── Admin — модерация ──────────────────────────────────────────────────────
 
   Future<List<Map<String, dynamic>>> getPendingLibraries() async {
     try {
@@ -560,7 +592,7 @@ class ApiService {
     }
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Helpers ────────────────────────────────────────────────────────────────
 
   String? _extractError(DioException e) {
     try {
