@@ -5,6 +5,7 @@ import '../services/pinning_service.dart';
 
 // kBaseUrl и dart-define полностью убраны.
 // URL теперь приходит из SecureStorage через PinningService.
+part 'config_provider.g.dart';
 
 const _kTokenKey = 'jwt_token';
 
