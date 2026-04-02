@@ -467,6 +467,16 @@ class ApiService {
     }
   }
 
+  /// Снять библиотеку с публикации (#2)
+  Future<String?> unpublishLibrary() async {
+    try {
+      await _dio.post('/api/library/mine/unpublish');
+      return null;
+    } on DioException catch (e) {
+      return _extractError(e) ?? 'Ошибка';
+    }
+  }
+
   Future<Map<String, dynamic>?> toggleLibraryLike(int libraryId) async {
     try {
       final res = await _dio.post('/api/library/$libraryId/like');
