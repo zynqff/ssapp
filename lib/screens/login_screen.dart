@@ -7,6 +7,7 @@ import 'package:google_fonts/google_fonts.dart';
 import '../providers/auth_provider.dart';
 import '../providers/config_provider.dart';
 import 'privacy_policy_screen.dart';
+import '../providers/config_provider.dart';
 
 // Шаги экрана
 enum _Step { form, code }
