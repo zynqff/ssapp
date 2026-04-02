@@ -1,4 +1,6 @@
 // lib/screens/library_screen.dart
+// Фикс #2: кнопка "Снять с публикации" вызывает unpublish()
+// Фикс #7: при открытии стиха передаём entryId → pin/read синхронизируются
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -104,8 +106,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 ]),
               ),
 
-              // Статус
-              if (libState.library.status != 'pending')
+              // Статус-баннер (pending/rejected)
+              if (libState.library.status != 'published' &&
+                  libState.library.status != 'private')
                 _StatusBanner(library: libState.library),
 
               // Панель выделения
@@ -118,7 +121,6 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                   onCancel: _exitSelection,
                 )
               else
-                // Счётчик + сортировка
                 Padding(
                   padding: const EdgeInsets.fromLTRB(20, 8, 16, 4),
                   child: Row(children: [
@@ -178,8 +180,12 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                                 text: poems[i].text,
                                 lineCount: poems[i].lineCount,
                               );
+                              // #7 и #8: передаём entryId для синхронизации read/pin
                               Navigator.push(ctx, MaterialPageRoute(
-                                  builder: (_) => PoemDetailScreen(poem: p)));
+                                  builder: (_) => PoemDetailScreen(
+                                    poem: p,
+                                    entryId: poems[i].id,
+                                  )));
                             }
                           },
                           onLongPress: () {
@@ -280,7 +286,8 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
               _showRenameDialog(context, libState);
             },
           ),
-          if (libState.library.status != 'published')
+          if (libState.library.status != 'published' &&
+              libState.library.status != 'pending')
             ListTile(
               leading: const Icon(Icons.publish_outlined),
               title: const Text('Опубликовать'),
@@ -289,7 +296,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
                 _publishLibrary(context);
               },
             ),
-          if (libState.library.status == 'published')
+          // #2: Снять с публикации — теперь правильно вызывает unpublish()
+          if (libState.library.status == 'published' ||
+              libState.library.status == 'pending')
             ListTile(
               leading: Icon(Icons.unpublished_outlined, color: cs.error),
               title: Text('Снять с публикации', style: TextStyle(color: cs.error)),
@@ -354,12 +363,9 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
 
+  // #2: Теперь вызывает правильный unpublish endpoint
   void _unpublishLibrary(BuildContext context) async {
-    final err = await ref.read(myLibraryProvider.notifier)
-        .updateInfo(
-          ref.read(myLibraryProvider).value?.library.name ?? 'Моя библиотека',
-          ref.read(myLibraryProvider).value?.library.description ?? '',
-        );
+    final err = await ref.read(myLibraryProvider.notifier).unpublish();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(err ?? 'Снято с публикации')));
@@ -556,7 +562,6 @@ class _LibraryPoemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
@@ -580,14 +585,12 @@ class _LibraryPoemCard extends StatelessWidget {
               ),
             ),
             child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              // Пин-иконка если закреплён
               if (poem.isPinned)
                 Padding(
                   padding: const EdgeInsets.only(right: 6, top: 2),
                   child: Icon(Icons.push_pin_rounded,
                       size: 13, color: cs.primary),
                 ),
-              // Контент
               Expanded(
                 child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -616,7 +619,6 @@ class _LibraryPoemCard extends StatelessWidget {
                 ]),
               ),
               const SizedBox(width: 8),
-              // Правая колонка: кружок прочитан + строки
               Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
