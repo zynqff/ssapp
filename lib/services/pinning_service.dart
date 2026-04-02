@@ -6,7 +6,7 @@ import 'package:dio/io.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:cryptography/cryptography.dart';
-import 'package:cryptography/dart.dart';  // для Dart implementation
+import 'package:crypto/crypto.dart' as crypto;
 
 const _kEd25519PublicKeyB64 = 'MCowBQYDK2VwAyEAixC+QsgLKtfAUHCrpTqqlmxChRjQpe5MMPdzHtZves8=';
 
@@ -124,12 +124,11 @@ class PinningService {
       final rawKey = pubKeyDer.length == 44 ? pubKeyDer.sublist(12) : pubKeyDer;
 
       final publicKey = SimplePublicKey(rawKey, type: KeyPairType.ed25519);
-      final signature = Signature(sigBytes, publicKey: publicKey);
-
-      final verified = await DartEd25519().verifySignature(
-        signature,
+      
+      final algorithm = Ed25519();
+      final verified = await algorithm.verify(
         msgBytes,
-        publicKey: publicKey,
+        signature: Signature(sigBytes, publicKey: publicKey),
       );
 
       return verified;
@@ -142,11 +141,11 @@ class PinningService {
   String _spkiSha256(Uint8List certDer) {
     try {
       final spki = _extractSpki(certDer);
-      final bytes = sha256.convert(spki).bytes;
+      final bytes = crypto.sha256.convert(spki).bytes;
       return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     } catch (e) {
       debugPrint('[Pinning] Ошибка извлечения SPKI: $e');
-      final bytes = sha256.convert(certDer).bytes;
+      final bytes = crypto.sha256.convert(certDer).bytes;
       return bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
     }
   }
