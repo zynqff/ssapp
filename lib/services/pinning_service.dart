@@ -15,7 +15,7 @@ import 'package:pointycastle/export.dart';
 //   openssl pkey -in private.pem -pubout -outform DER | base64
 // Приватный ключ → GitHub Secret CONFIG_PRIVATE_KEY
 // ─────────────────────────────────────────────────────────────────────────────
-const _kEd25519PublicKeyB64 = 'СЮДА_ВСТАВЬ_СВОЙ_BASE64_ПУБЛИЧНЫЙ_КЛЮЧ';
+const _kEd25519PublicKeyB64 = 'MCowBQYDK2VwAyEAixC+QsgLKtfAUHCrpTqqlmxChRjQpe5MMPdzHtZves8=';
 
 // Ключи SecureStorage
 const _kStorageApiUrl         = 'pinned_api_url';
