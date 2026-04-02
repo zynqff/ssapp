@@ -84,12 +84,10 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     final res = await _api.toggleLibraryPoemPin(entryId);
     if (res == null) return 'Ошибка';
 
-    // Если сервер вернул ошибку лимита
     if (res['error'] != null) {
       return res['error'] as String;
     }
 
-    // Оптимистичное обновление
     final current = state.value;
     if (current != null) {
       final isPinned = res['is_pinned'] as bool? ?? false;
@@ -114,10 +112,16 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
     return result;
   }
 
+  /// Снять с публикации (#2)
+  Future<String?> unpublish() async {
+    final err = await _api.unpublishLibrary();
+    if (err == null) await load();
+    return err;
+  }
+
   Future<String?> deleteLibrary() async {
     final err = await _api.deleteMyLibrary();
     if (err == null) {
-      // Перезагружаем — сервер создаст новую пустую библиотеку
       await load();
     }
     return err;
@@ -130,7 +134,6 @@ class MyLibraryNotifier extends StateNotifier<AsyncValue<LibraryState?>> {
   }) {
     var poems = List<LibraryPoem>.from(state.value?.poems ?? []);
 
-    // Фильтр по прочитанности
     if (sortBy == LibrarySortBy.read) {
       poems = poems.where((p) => p.isRead).toList();
     } else if (sortBy == LibrarySortBy.unread) {
