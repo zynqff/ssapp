@@ -1,6 +1,5 @@
 // lib/screens/profile_screen.dart
-// Прогресс теперь считается по стихам активной библиотеки
-// Доступ к AI перенесён в настройки
+// Фикс #6: пустая библиотека показывает 0/0/0%, не старые глобальные данные
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -18,7 +17,7 @@ class ProfileScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(authProvider);
     final globalPoems = ref.watch(poemsProvider).value ?? [];
-    final libState = ref.watch(myLibraryProvider).value;
+    final libAsync = ref.watch(myLibraryProvider);
     final cs = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -63,26 +62,40 @@ class ProfileScreen extends ConsumerWidget {
             );
           }
 
-          // Считаем прогресс по активной библиотеке если она есть
+          // #6: Считаем прогресс.
+          // Если библиотека загружена — используем её данные (даже если пустая → 0/0/0%).
+          // Только если библиотека ещё не загружена (null/loading) — используем глобальный счётчик.
+          final libState = libAsync.valueOrNull;
+          final libLoaded = libAsync is AsyncData;
+
           int readCount;
           int total;
           int pct;
-          if (libState != null && libState.poems.isNotEmpty) {
+          String? libName;
+
+          if (libLoaded && libState != null) {
+            // Библиотека загружена — всегда берём её данные
             total = libState.poems.length;
             readCount = libState.poems.where((p) => p.isRead).length;
-            pct = ((readCount / total) * 100).round();
-          } else {
+            pct = total > 0 ? ((readCount / total) * 100).round() : 0;
+            libName = libState.library.name;
+          } else if (!libLoaded) {
+            // Библиотека ещё грузится — показываем глобальные данные как заглушку
             readCount = user.readPoems.length;
             total = globalPoems.length;
             pct = total > 0 ? ((readCount / total) * 100).round() : 0;
+            libName = null;
+          } else {
+            // libState == null (ошибка загрузки библиотеки)
+            readCount = 0;
+            total = 0;
+            pct = 0;
+            libName = null;
           }
-
-          final libName = libState?.library.name;
 
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
             children: [
-              // Профиль
               _SectionCard(child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -109,7 +122,7 @@ class ProfileScreen extends ConsumerWidget {
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Divider(color: cs.outline.withOpacity(0.4), height: 1),
                   ),
-                  // Прогресс
+                  // Подпись библиотеки
                   if (libName != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
@@ -133,22 +146,41 @@ class ProfileScreen extends ConsumerWidget {
                       _Stat(label: 'Прогресс', value: '$pct%'),
                     ],
                   ),
-                  if (user.pinnedPoemId != null) ...[
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      child: Divider(color: cs.outline.withOpacity(0.4), height: 1),
-                    ),
-                    Row(children: [
-                      Icon(Icons.push_pin_rounded, size: 13, color: cs.tertiary),
-                      const SizedBox(width: 6),
-                      Expanded(child: Text(
-                        'Закреплено: ${globalPoems.where((p) => p.id == user.pinnedPoemId).firstOrNull?.title ?? "#${user.pinnedPoemId}"}',
-                        overflow: TextOverflow.ellipsis,
-                        style: GoogleFonts.notoSerif(
-                            color: cs.onSurfaceVariant, fontSize: 12.5),
-                      )),
-                    ]),
-                  ],
+                  // Закреплённый стих: берём из библиотеки (#7), fallback — из auth
+                  Builder(builder: (context) {
+                    String? pinnedTitle;
+
+                    // Сначала ищем закреплённый в библиотеке
+                    final pinned = libState?.poems.where((p) => p.isPinned).toList() ?? [];
+                    if (pinned.isNotEmpty) {
+                      pinnedTitle = pinned.first.title;
+                    } else if (user.pinnedPoemId != null) {
+                      // Fallback — глобальный пин
+                      pinnedTitle = globalPoems
+                          .where((p) => p.id == user.pinnedPoemId)
+                          .firstOrNull
+                          ?.title ?? '#${user.pinnedPoemId}';
+                    }
+
+                    if (pinnedTitle == null) return const SizedBox.shrink();
+
+                    return Column(children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        child: Divider(color: cs.outline.withOpacity(0.4), height: 1),
+                      ),
+                      Row(children: [
+                        Icon(Icons.push_pin_rounded, size: 13, color: cs.tertiary),
+                        const SizedBox(width: 6),
+                        Expanded(child: Text(
+                          'Закреплено: $pinnedTitle',
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.notoSerif(
+                              color: cs.onSurfaceVariant, fontSize: 12.5),
+                        )),
+                      ]),
+                    ]);
+                  }),
                 ],
               )),
               const SizedBox(height: 20),
