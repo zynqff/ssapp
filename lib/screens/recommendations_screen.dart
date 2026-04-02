@@ -1,4 +1,6 @@
 // lib/screens/recommendations_screen.dart
+// Фикс #9: открытие полного текста из "Часто добавляют" → fromPopular=true
+// Фикс #10: галочка вместо + если стих уже в библиотеке
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,7 +9,6 @@ import '../providers/recommendations_provider.dart';
 import '../providers/library_provider.dart';
 import '../models/library.dart';
 import '../models/poem.dart';
-import '../services/api_service.dart';
 import 'poem_detail_screen.dart';
 import 'library_detail_screen.dart';
 
@@ -261,7 +262,9 @@ class _LibraryCard extends StatelessWidget {
   }
 }
 
-// ── Популярный стих — формат как в библиотеке + кнопка добавить ──────────────
+// ── Популярный стих ───────────────────────────────────────────────────────────
+// Фикс #9: при нажатии на карточку открываем с fromPopular=true
+// Фикс #10: иконка галочки если стих уже в библиотеке
 
 class _PopularPoemCard extends ConsumerWidget {
   final Poem poem;
@@ -270,11 +273,16 @@ class _PopularPoemCard extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
+    final libState = ref.watch(myLibraryProvider).value;
+
     final preview = poem.text.trim().split('\n')
         .where((l) => l.trim().isNotEmpty).take(2).join('\n');
     final lineCount = poem.lineCount > 0
         ? poem.lineCount
         : poem.text.trim().split('\n').length;
+
+    // #10: проверяем, добавлен ли стих уже
+    final isAdded = libState?.poems.any((p) => p.poemId == poem.id) ?? false;
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
@@ -283,8 +291,12 @@ class _PopularPoemCard extends ConsumerWidget {
         borderRadius: BorderRadius.circular(14),
         child: InkWell(
           borderRadius: BorderRadius.circular(14),
+          // #9: открываем с fromPopular=true
           onTap: () => Navigator.push(context,
-              MaterialPageRoute(builder: (_) => PoemDetailScreen(poem: poem))),
+              MaterialPageRoute(builder: (_) => PoemDetailScreen(
+                poem: poem,
+                fromPopular: true,
+              ))),
           child: Container(
             padding: const EdgeInsets.fromLTRB(16, 14, 8, 14),
             decoration: BoxDecoration(
@@ -312,47 +324,50 @@ class _PopularPoemCard extends ConsumerWidget {
                 ],
               ])),
               const SizedBox(width: 8),
-              // Правая колонка: добавить + строки
               Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-                GestureDetector(
-                  onTap: () async {
-                    final confirmed = await showDialog<bool>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        backgroundColor: cs.surface,
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18)),
-                        title: Text('Добавить стих?',
-                            style: GoogleFonts.playfairDisplay(
-                                fontWeight: FontWeight.w600)),
-                        content: Text('"${poem.title}"',
-                            style: GoogleFonts.notoSerif(
-                                color: cs.onSurfaceVariant)),
-                        actions: [
-                          TextButton(
-                              onPressed: () => Navigator.pop(ctx, false),
-                              child: const Text('Нет')),
-                          FilledButton(
-                              onPressed: () => Navigator.pop(ctx, true),
-                              child: const Text('Добавить')),
-                        ],
+                // #10: галочка если уже добавлен, иначе кнопка добавить
+                isAdded
+                    ? Icon(Icons.check_circle,
+                        color: cs.primary, size: 26)
+                    : GestureDetector(
+                        onTap: () async {
+                          final confirmed = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              backgroundColor: cs.surface,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(18)),
+                              title: Text('Добавить стих?',
+                                  style: GoogleFonts.playfairDisplay(
+                                      fontWeight: FontWeight.w600)),
+                              content: Text('"${poem.title}"',
+                                  style: GoogleFonts.notoSerif(
+                                      color: cs.onSurfaceVariant)),
+                              actions: [
+                                TextButton(
+                                    onPressed: () => Navigator.pop(ctx, false),
+                                    child: const Text('Нет')),
+                                FilledButton(
+                                    onPressed: () => Navigator.pop(ctx, true),
+                                    child: const Text('Добавить')),
+                              ],
+                            ),
+                          );
+                          if (confirmed == true && context.mounted) {
+                            final err = await ref
+                                .read(myLibraryProvider.notifier)
+                                .addPoem(poem.id);
+                            if (context.mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(err ?? 'Добавлено в библиотеку'),
+                                behavior: SnackBarBehavior.floating,
+                              ));
+                            }
+                          }
+                        },
+                        child: Icon(Icons.add_circle_outline,
+                            color: cs.primary, size: 26),
                       ),
-                    );
-                    if (confirmed == true && context.mounted) {
-                      final err = await ref
-                          .read(myLibraryProvider.notifier)
-                          .addPoem(poem.id);
-                      if (context.mounted) {
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text(err ?? 'Добавлено в библиотеку'),
-                          behavior: SnackBarBehavior.floating,
-                        ));
-                      }
-                    }
-                  },
-                  child: Icon(Icons.add_circle_outline,
-                      color: cs.primary, size: 26),
-                ),
                 const SizedBox(height: 4),
                 Text('$lineCount стр.',
                     style: GoogleFonts.notoSerif(
