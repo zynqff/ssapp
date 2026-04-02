@@ -13,13 +13,27 @@ import 'screens/login_screen.dart';
 
 const String kAppVersion = '1.0.5';
 
+
 void main() async {
+  // 1. Обязательная инициализация движка Flutter для работы с нативными функциями
   WidgetsFlutterBinding.ensureInitialized();
+
+  // 2. Ждем завершения инициализации сервиса безопасности.
+  // Пока этот метод не отработает, runApp не запустится.
+  await PinningService.instance.init(); 
+
+  // 3. Настройка прозрачного статус-бара
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
     statusBarColor: Colors.transparent,
     statusBarIconBrightness: Brightness.light,
   ));
-  runApp(const ProviderScope(child: _App()));
+
+  // 4. Запуск приложения в ProviderScope для работы Riverpod
+  runApp(
+    const ProviderScope(
+      child: _App(),
+    ),
+  );
 }
 
 class _App extends ConsumerWidget {
