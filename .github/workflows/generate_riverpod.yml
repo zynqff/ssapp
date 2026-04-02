@@ -34,12 +34,16 @@ jobs:
       - name: Check for changes
         id: check_changes
         run: |
-          git add lib/**/*.g.dart
+          # Флаг -f заставит добавить файлы, даже если они в .gitignore
+          git add -f lib/**/*.g.dart 
+          
+          # Проверяем наличие изменений в индексе
           if git diff --cached --quiet; then
             echo "has_changes=false" >> $GITHUB_OUTPUT
           else
             echo "has_changes=true" >> $GITHUB_OUTPUT
           fi
+
           
       - name: Commit generated files
         if: steps.check_changes.outputs.has_changes == 'true'
