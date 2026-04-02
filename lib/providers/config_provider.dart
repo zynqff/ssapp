@@ -1,8 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-
-import 'pinning_service.dart';
+import '../services/pinning_service.dart';
 
 // kBaseUrl и dart-define полностью убраны.
 // URL теперь приходит из SecureStorage через PinningService.
