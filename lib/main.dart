@@ -11,7 +11,6 @@ import 'providers/config_provider.dart';
 import 'screens/main_shell.dart';
 import 'screens/login_screen.dart';
 import 'services/pinning_service.dart';
-import 'providers/config_provider.dart';
 
 const String kAppVersion = '1.0.5';
 
