@@ -13,8 +13,8 @@ const _kEd25519PublicKeyB64 = 'MCowBQYDK2VwAyEAixC+QsgLKtfAUHCrpTqqlmxChRjQpe5MM
 const _kStorageApiUrl = 'pinned_api_url';
 const _kStorageApiFingerprint = 'pinned_api_fingerprint';
 
-const _kGithubPagesConfigUrl = 'https://zynqff.github.io/ss-config/config.json';
-const _kGithubPagesSigUrl = 'https://zynqff.github.io/ss-config/config.sig';
+const _kGithubPagesConfigUrl = 'https://rayadv.ru/config.json';
+const _kGithubPagesSigUrl = 'https://rayadv.ru/config.sig';
 
 class PinningService {
   PinningService._();
