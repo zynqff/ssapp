@@ -21,7 +21,8 @@ void main() async {
 
   // 2. Ждем завершения инициализации сервиса безопасности.
   // Пока этот метод не отработает, runApp не запустится.
-  await PinningService.instance.init(); 
+  await PinningService.instance.init();
+  await PinningService.instance.fetchAndVerifyConfig();
 
   // 3. Настройка прозрачного статус-бара
   SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
