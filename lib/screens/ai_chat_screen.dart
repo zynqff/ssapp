@@ -6,7 +6,6 @@ import '../providers/chat_provider.dart';
 import '../providers/config_provider.dart';
 import '../models/chat_message.dart';
 import '../services/sync_service.dart';
-import '../providers/config_provider.dart';
 
 class AiChatScreen extends ConsumerStatefulWidget {
   const AiChatScreen({super.key});
