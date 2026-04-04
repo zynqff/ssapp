@@ -8,6 +8,11 @@ import 'auth_provider.dart';
 
 part 'poems_provider.g.dart';
 
+// УДАЛИТЕ эти строки в конце файла:
+// final poemsProvider = poemsProvider$;
+// final searchQueryProvider = searchQueryProvider$;
+// final filteredPoemsProvider = filteredPoemsProvider$;
+
 @riverpod
 class Poems extends _$Poems {
   DatabaseService get _db => ref.read(dbServiceProvider);
@@ -65,8 +70,3 @@ List<Poem> filteredPoems(FilteredPoemsRef ref) {
           p.text.toLowerCase().contains(q))
       .toList();
 }
-
-// Алиасы для экранов
-final poemsProvider = poemsProvider$;
-final searchQueryProvider = searchQueryProvider$;
-final filteredPoemsProvider = filteredPoemsProvider$;

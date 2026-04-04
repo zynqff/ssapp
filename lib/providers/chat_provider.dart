@@ -17,6 +17,7 @@ class Chat extends _$Chat {
   bool _sending = false;
   bool get isSending => _sending;
 
+  // Аргумент передаётся через build
   @override
   Future<List<ChatMessage>> build(String username) async {
     try {
@@ -28,11 +29,16 @@ class Chat extends _$Chat {
   }
 
   Future<String?> send(String prompt) async {
+    final username = state.valueOrNull != null 
+        ? (build as dynamic).argument 
+        : null;
+    if (username == null) return 'Ошибка: пользователь не определён';
+    
     try {
       if (!await SyncService().isOnline()) return 'AI-чат требует интернета';
 
       final userMsg = ChatMessage(role: 'user', content: prompt, createdAt: DateTime.now());
-      await _db.saveChatMessage(arg, userMsg);
+      await _db.saveChatMessage(username, userMsg);
       state = AsyncValue.data([...?state.value, userMsg]);
 
       _sending = true;
@@ -43,7 +49,7 @@ class Chat extends _$Chat {
       if (response == '__no_access__') return 'Нет доступа к AI. Введите ключ в профиле.';
 
       final modelMsg = ChatMessage(role: 'model', content: response, createdAt: DateTime.now());
-      await _db.saveChatMessage(arg, modelMsg);
+      await _db.saveChatMessage(username, modelMsg);
       state = AsyncValue.data([...?state.value, modelMsg]);
       return null;
     } catch (e) {
@@ -54,8 +60,12 @@ class Chat extends _$Chat {
   }
 
   Future<void> clear() async {
+    final username = state.valueOrNull != null 
+        ? (build as dynamic).argument 
+        : null;
+    if (username == null) return;
     try {
-      await _db.clearChatHistory(arg);
+      await _db.clearChatHistory(username);
       state = const AsyncValue.data([]);
     } catch (e) {
       debugPrint('[Chat] Ошибка очистки: $e');
@@ -63,4 +73,5 @@ class Chat extends _$Chat {
   }
 }
 
-final chatProvider = chatProvider$;
+// УДАЛИТЕ эту строку:
+// final chatProvider = chatProvider$;

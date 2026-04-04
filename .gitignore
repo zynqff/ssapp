@@ -24,3 +24,4 @@ android/app/google-services.json
 .vscode/
 *.swp
 *.swo
+*.bak

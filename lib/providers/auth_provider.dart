@@ -93,12 +93,12 @@ class Auth extends _$Auth {
       final data = await _api.getMe();
       if (data == null) {
         await _api.clearTokens();
-        if (mounted) state = const AsyncValue.data(null);
+        state = const AsyncValue.data(null);
         return;
       }
       final user = User.fromJson(data);
       await _db.setReadPoems(user.username, user.readPoems);
-      if (mounted) state = AsyncValue.data(user);
+      state = AsyncValue.data(user);
       await _sync.syncPoems();
     } catch (e) {
       debugPrint('[Auth] Ошибка фонового обновления: $e');
@@ -118,12 +118,12 @@ class Auth extends _$Auth {
       final data = await _api.getMe();
       if (data == null) {
         await _api.clearTokens();
-        if (mounted) state = const AsyncValue.data(null);
+        state = const AsyncValue.data(null);
         return 'Не удалось загрузить профиль. Проверьте интернет.';
       }
       final user = User.fromJson(data);
       await _db.setReadPoems(user.username, user.readPoems);
-      if (mounted) state = AsyncValue.data(user);
+      state = AsyncValue.data(user);
       _backgroundSync(user.username);
       return null;
     } catch (e) {
