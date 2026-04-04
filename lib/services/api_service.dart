@@ -4,10 +4,8 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 import 'pinning_service.dart';
 
-// kBaseUrl и dart-define полностью убраны.
-// URL теперь приходит из SecureStorage через PinningService.
-
 const _kTokenKey = 'jwt_token';
+const _kRefreshTokenKey = 'jwt_refresh_token';
 
 class ApiService {
   static final ApiService _i = ApiService._();
@@ -20,12 +18,10 @@ class ApiService {
 
   late final Dio _dio;
 
-  // Публичный геттер нужен config_provider для applyToDio
   Dio get dio => _dio;
 
   void _initDio() {
     _dio = Dio(BaseOptions(
-      // baseUrl не задаём — подставляется динамически в interceptor
       connectTimeout: const Duration(seconds: 30),
       receiveTimeout: const Duration(seconds: 30),
       headers: {'Content-Type': 'application/json'},
@@ -33,10 +29,9 @@ class ApiService {
 
     _dio.interceptors.add(InterceptorsWrapper(
       onRequest: (options, handler) async {
-        // ── 1. Подставляем актуальный baseUrl из PinningService ──────────────
+        // ── 1. Подставляем baseUrl из PinningService ─────────────────────────
         final apiUrl = PinningService.instance.trustedApiUrl;
         if (apiUrl == null || apiUrl.isEmpty) {
-          // URL ещё не загружен с GitHub Pages — блокируем запрос
           debugPrint('[ApiService] ❌ api_url не загружен, запрос отклонён');
           return handler.reject(
             DioException(
@@ -47,12 +42,11 @@ class ApiService {
           );
         }
 
-        // Подставляем базовый URL если путь относительный
         if (!options.uri.isAbsolute) {
           options.baseUrl = apiUrl;
         }
 
-        // ── 2. Подставляем JWT токен ─────────────────────────────────────────
+        // ── 2. Подставляем access token ──────────────────────────────────────
         final token = await getToken();
         if (token != null) {
           options.headers['Authorization'] = 'Bearer $token';
@@ -60,9 +54,52 @@ class ApiService {
 
         handler.next(options);
       },
+
+      onError: (error, handler) async {
+        // ── 3. Автообновление токена при 401 ────────────────────────────────
+        if (error.response?.statusCode == 401) {
+          // Не пытаемся рефрешить сам запрос рефреша — бесконечный цикл
+          final path = error.requestOptions.path;
+          if (path.contains('/api/auth/refresh')) {
+            return handler.next(error);
+          }
+
+          debugPrint('[ApiService] 401 — пробуем обновить токен...');
+          final refreshed = await _tryRefreshToken();
+
+          if (refreshed) {
+            // Повторяем оригинальный запрос с новым токеном
+            try {
+              final token = await getToken();
+              final opts = error.requestOptions;
+              opts.headers['Authorization'] = 'Bearer $token';
+
+              final apiUrl = PinningService.instance.trustedApiUrl ?? '';
+              final retryDio = Dio(BaseOptions(
+                baseUrl: apiUrl,
+                connectTimeout: const Duration(seconds: 30),
+                receiveTimeout: const Duration(seconds: 30),
+                headers: {'Content-Type': 'application/json'},
+              ));
+              PinningService.instance.applyToDio(retryDio);
+
+              final response = await retryDio.fetch(opts);
+              return handler.resolve(response);
+            } catch (e) {
+              return handler.next(error);
+            }
+          } else {
+            // Refresh тоже не прошёл — разлогиниваем
+            debugPrint('[ApiService] ❌ Refresh не прошёл, очищаем токены');
+            await clearTokens();
+            return handler.next(error);
+          }
+        }
+
+        handler.next(error);
+      },
     ));
 
-    // Применяем SSL pinning (validateCertificate)
     PinningService.instance.applyToDio(_dio);
   }
 
@@ -71,9 +108,56 @@ class ApiService {
   Future<void> saveToken(String token) =>
       _storage.write(key: _kTokenKey, value: token);
 
+  Future<void> saveRefreshToken(String token) =>
+      _storage.write(key: _kRefreshTokenKey, value: token);
+
   Future<String?> getToken() => _storage.read(key: _kTokenKey);
 
+  Future<String?> getRefreshToken() => _storage.read(key: _kRefreshTokenKey);
+
   Future<void> clearToken() => _storage.delete(key: _kTokenKey);
+
+  Future<void> clearTokens() async {
+    await _storage.delete(key: _kTokenKey);
+    await _storage.delete(key: _kRefreshTokenKey);
+  }
+
+  // Пробует обновить access token через refresh token.
+  // Возвращает true если успешно.
+  Future<bool> _tryRefreshToken() async {
+    final refreshToken = await getRefreshToken();
+    if (refreshToken == null) return false;
+
+    try {
+      final apiUrl = PinningService.instance.trustedApiUrl;
+      if (apiUrl == null) return false;
+
+      final refreshDio = Dio(BaseOptions(
+        baseUrl: apiUrl,
+        connectTimeout: const Duration(seconds: 15),
+        receiveTimeout: const Duration(seconds: 15),
+        headers: {'Content-Type': 'application/json'},
+      ));
+      PinningService.instance.applyToDio(refreshDio);
+
+      final res = await refreshDio.post('/api/auth/refresh',
+          data: {'refresh_token': refreshToken});
+
+      final newAccess = res.data['access_token'] as String?;
+      final newRefresh = res.data['refresh_token'] as String?;
+
+      if (newAccess == null) return false;
+
+      await saveToken(newAccess);
+      if (newRefresh != null) await saveRefreshToken(newRefresh);
+
+      debugPrint('[ApiService] ✅ Токен обновлён');
+      return true;
+    } catch (e) {
+      debugPrint('[ApiService] ❌ Ошибка обновления токена: $e');
+      return false;
+    }
+  }
 
   // ── OTP ────────────────────────────────────────────────────────────────────
 
@@ -98,10 +182,12 @@ class ApiService {
         'email': email.trim(),
         'token': code.trim(),
       });
-      final token    = res.data['access_token'] as String;
-      final username = res.data['username'] as String;
-      final isAdmin  = res.data['is_admin'] as bool? ?? false;
+      final token       = res.data['access_token'] as String;
+      final refreshToken = res.data['refresh_token'] as String?;
+      final username    = res.data['username'] as String;
+      final isAdmin     = res.data['is_admin'] as bool? ?? false;
       await saveToken(token);
+      if (refreshToken != null) await saveRefreshToken(refreshToken);
       return (error: null, token: token, username: username, isAdmin: isAdmin);
     } on DioException catch (e) {
       return (
@@ -121,10 +207,12 @@ class ApiService {
         'token': code.trim(),
         'username': username.trim(),
       });
-      final token = res.data['access_token'] as String;
-      final uname = res.data['username'] as String;
-      final isAdmin = res.data['is_admin'] as bool? ?? false;
+      final token        = res.data['access_token'] as String;
+      final refreshToken = res.data['refresh_token'] as String?;
+      final uname        = res.data['username'] as String;
+      final isAdmin      = res.data['is_admin'] as bool? ?? false;
       await saveToken(token);
+      if (refreshToken != null) await saveRefreshToken(refreshToken);
       return (error: null, token: token, username: uname, isAdmin: isAdmin);
     } on DioException catch (e) {
       return (
@@ -154,10 +242,12 @@ class ApiService {
     try {
       final res = await _dio
           .post('/api/google/mobile-auth', data: {'id_token': idToken});
-      final token    = res.data['access_token'] as String;
-      final username = res.data['username'] as String;
-      final isAdmin  = res.data['is_admin'] as bool? ?? false;
+      final token        = res.data['access_token'] as String;
+      final refreshToken = res.data['refresh_token'] as String?;
+      final username     = res.data['username'] as String;
+      final isAdmin      = res.data['is_admin'] as bool? ?? false;
       await saveToken(token);
+      if (refreshToken != null) await saveRefreshToken(refreshToken);
       return (error: null, token: token, username: username, isAdmin: isAdmin);
     } on DioException catch (e) {
       return (
@@ -197,9 +287,11 @@ class ApiService {
     try {
       final res = await _dio.post('/api/change_username',
           data: {'new_username': newUsername.trim()});
-      final token = res.data['access_token'] as String;
+      final token = res.data['access_token'] as String?;
+      final refreshToken = res.data['refresh_token'] as String?;
       final uname = res.data['username'] as String;
-      await saveToken(token);
+      if (token != null) await saveToken(token);
+      if (refreshToken != null) await saveRefreshToken(refreshToken);
       return (error: null, newUsername: uname);
     } on DioException catch (e) {
       return (
