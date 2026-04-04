@@ -1,16 +1,60 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/poem.dart';
 import '../services/database_service.dart';
 import '../services/sync_service.dart';
+import 'auth_provider.dart';
 
-final poemsProvider =
-    StateNotifierProvider<PoemsNotifier, AsyncValue<List<Poem>>>((ref) {
-  return PoemsNotifier();
-});
+part 'poems_provider.g.dart';
 
-final searchQueryProvider = StateProvider<String>((ref) => '');
+@riverpod
+class Poems extends _$Poems {
+  DatabaseService get _db => ref.read(dbServiceProvider);
+  SyncService get _sync => ref.read(syncServiceProvider);
 
-final filteredPoemsProvider = Provider<List<Poem>>((ref) {
+  @override
+  Future<List<Poem>> build() => _load();
+
+  Future<List<Poem>> _load() async {
+    try {
+      final local = await _db.getAllPoems();
+      if (local.isNotEmpty) {
+        Future.microtask(_syncInBackground);
+        return local;
+      }
+      final result = await _sync.syncPoems();
+      if (result == SyncResult.success) return _db.getAllPoems();
+      throw Exception('Нет данных. Подключитесь к интернету для первой загрузки.');
+    } catch (e) {
+      debugPrint('[Poems] Ошибка загрузки: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> _syncInBackground() async {
+    try {
+      final result = await _sync.syncPoems();
+      if (result == SyncResult.success) {
+        final updated = await _db.getAllPoems();
+        if (mounted) state = AsyncValue.data(updated);
+      }
+    } catch (e) {
+      debugPrint('[Poems] Ошибка фоновой синхронизации: $e');
+    }
+  }
+
+  Future<void> refresh() async {
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(_load);
+  }
+}
+
+@riverpod
+String searchQuery(SearchQueryRef ref) => '';
+
+@riverpod
+List<Poem> filteredPoems(FilteredPoemsRef ref) {
   final poems = ref.watch(poemsProvider).value ?? [];
   final q = ref.watch(searchQueryProvider).toLowerCase().trim();
   if (q.isEmpty) return poems;
@@ -20,35 +64,9 @@ final filteredPoemsProvider = Provider<List<Poem>>((ref) {
           p.author.toLowerCase().contains(q) ||
           p.text.toLowerCase().contains(q))
       .toList();
-});
-
-class PoemsNotifier extends StateNotifier<AsyncValue<List<Poem>>> {
-  PoemsNotifier() : super(const AsyncValue.loading()) {
-    load();
-  }
-
-  final _db = DatabaseService();
-  final _sync = SyncService();
-
-  Future<void> load() async {
-    try {
-      // Сначала — локальные данные (мгновенно)
-      final local = await _db.getAllPoems();
-      if (local.isNotEmpty) state = AsyncValue.data(local);
-
-      // Потом пробуем синхронизировать
-      final result = await _sync.syncPoems();
-      if (result == SyncResult.success) {
-        state = AsyncValue.data(await _db.getAllPoems());
-      } else if (local.isEmpty) {
-        state = AsyncValue.error(
-            'Нет данных. Подключитесь к интернету для первой загрузки.',
-            StackTrace.current);
-      }
-    } catch (e, st) {
-      state = AsyncValue.error(e, st);
-    }
-  }
-
-  Future<void> refresh() => load();
 }
+
+// Алиасы для экранов
+final poemsProvider = poemsProvider$;
+final searchQueryProvider = searchQueryProvider$;
+final filteredPoemsProvider = filteredPoemsProvider$;

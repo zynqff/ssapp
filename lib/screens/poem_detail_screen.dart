@@ -1,7 +1,4 @@
 // lib/screens/poem_detail_screen.dart
-// Фикс #7: pin через библиотечный entryId синхронизируется с экраном библиотеки
-// Фикс #8: read через библиотечный entryId синхронизируется с экраном библиотеки
-// Фикс #9: fromPopular=true скрывает кнопки прочитать/закрепить/удалить
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -13,13 +10,7 @@ import '../providers/library_provider.dart';
 
 class PoemDetailScreen extends ConsumerWidget {
   final Poem poem;
-
-  /// entryId — id записи в user_library_poem (если открыт из библиотеки).
-  /// Если задан, read/pin работают через libraryProvider (синхронизируются с экраном библиотеки).
   final int? entryId;
-
-  /// fromPopular=true — открыт из "Часто добавляют".
-  /// Скрывает кнопки прочитать/закрепить/удалить, если стих НЕ в библиотеке.
   final bool fromPopular;
 
   const PoemDetailScreen({
@@ -36,7 +27,6 @@ class PoemDetailScreen extends ConsumerWidget {
     final cs = Theme.of(context).colorScheme;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    // Ищем запись стиха в библиотеке
     final libraryEntry = libState?.poems.where(
       (p) => p.poemId == poem.id || (p.isCustom && p.title == poem.title),
     ).firstOrNull;
@@ -44,15 +34,8 @@ class PoemDetailScreen extends ConsumerWidget {
     final effectiveEntryId = entryId ?? libraryEntry?.id;
     final isInLibrary = libraryEntry != null;
 
-    // Состояние read: если есть запись в библиотеке — берём оттуда, иначе из auth
-    final isRead = libraryEntry?.isRead
-        ?? (user?.readPoems.contains(poem.id) ?? false);
-
-    // Состояние pin: если есть запись в библиотеке — берём оттуда, иначе из auth
-    final isPinned = libraryEntry?.isPinned
-        ?? (user?.pinnedPoemId == poem.id);
-
-    // fromPopular && стих не в библиотеке → скрываем кнопки управления (#9)
+    final isRead = libraryEntry?.isRead ?? (user?.readPoems.contains(poem.id) ?? false);
+    final isPinned = libraryEntry?.isPinned ?? (user?.pinnedPoemId == poem.id);
     final showLibraryControls = user != null && (!fromPopular || isInLibrary);
 
     return Scaffold(
@@ -86,49 +69,44 @@ class PoemDetailScreen extends ConsumerWidget {
                         color: isDark ? Colors.white : Colors.black87)),
                 backgroundColor: cs.surfaceVariant,
                 behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12)),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
               ));
             },
           ),
           if (showLibraryControls) ...[
             const SizedBox(width: 4),
-            // Кнопка закрепить (#7): если стих в библиотеке — pin через libraryProvider
             _AppBarAction(
               icon: isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
               active: isPinned,
               onTap: () async {
                 if (effectiveEntryId != null) {
-                  // Закреплён в библиотеке — синхронизируем с экраном библиотеки
+                  // В библиотеке — через myLibraryProvider
                   final err = await ref
                       .read(myLibraryProvider.notifier)
                       .togglePin(effectiveEntryId);
                   if (err != null && context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(err)));
+                    ScaffoldMessenger.of(context)
+                        .showSnackBar(SnackBar(content: Text(err)));
                   }
                 } else {
-                  // Стих не в библиотеке — глобальный пин
-                  await ref.read(authProvider.notifier).togglePin(poem.id);
+                  // Глобальный пин — через readingProgressProvider
+                  await ref.read(readingProgressProvider.notifier).togglePin(poem.id);
                 }
               },
             ),
             const SizedBox(width: 4),
-            // Кнопка прочитан (#8): если стих в библиотеке — read через libraryProvider
             _AppBarAction(
-              icon: isRead
-                  ? Icons.check_circle_rounded
-                  : Icons.check_circle_outline_rounded,
+              icon: isRead ? Icons.check_circle_rounded : Icons.check_circle_outline_rounded,
               active: isRead,
               onTap: () async {
                 if (effectiveEntryId != null) {
-                  // Отмечаем через библиотеку — синхронизируется с экраном библиотеки
+                  // В библиотеке — через myLibraryProvider
                   await ref
                       .read(myLibraryProvider.notifier)
                       .toggleRead(effectiveEntryId);
                 } else {
-                  // Стих не в библиотеке — глобальный toggleRead
-                  await ref.read(authProvider.notifier).toggleRead(poem.id);
+                  // Глобальный read — через readingProgressProvider
+                  await ref.read(readingProgressProvider.notifier).toggleRead(poem.id);
                 }
               },
             ),
@@ -141,50 +119,34 @@ class PoemDetailScreen extends ConsumerWidget {
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(poem.author,
               style: GoogleFonts.notoSerif(
-                  color: cs.primary, fontSize: 14,
-                  fontStyle: FontStyle.italic)),
+                  color: cs.primary, fontSize: 14, fontStyle: FontStyle.italic)),
           const SizedBox(height: 4),
           if (poem.lineCount > 0)
             Text('${poem.lineCount} строк',
-                style: GoogleFonts.notoSerif(
-                    color: cs.onSurfaceVariant, fontSize: 12)),
+                style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 12)),
           const SizedBox(height: 16),
           Container(
             width: 40, height: 1.5,
             decoration: BoxDecoration(
-              gradient: LinearGradient(
-                  colors: [cs.primary, cs.primary.withOpacity(0)]),
+              gradient: LinearGradient(colors: [cs.primary, cs.primary.withOpacity(0)]),
             ),
           ),
           const SizedBox(height: 16),
           SelectableText(
             poem.text,
-            style: GoogleFonts.notoSerif(
-                color: cs.onSurface, fontSize: 16, height: 1.95),
+            style: GoogleFonts.notoSerif(color: cs.onSurface, fontSize: 16, height: 1.95),
           ),
-
-          // Кнопка удалить из библиотеки — только если стих в библиотеке
-          // и открыт НЕ из "Часто добавляют" (#9)
           if (!fromPopular && isInLibrary && libraryEntry != null)
             _DeleteFromLibraryButton(poem: poem, entry: libraryEntry),
-
-          // Кнопка добавить в библиотеку — если из "Часто добавляют" и стих НЕ добавлен (#9)
           if (fromPopular && !isInLibrary && user != null)
             _AddToLibraryButton(poem: poem),
-
           if (showLibraryControls && (isRead || isPinned)) ...[
             const SizedBox(height: 28),
             Wrap(spacing: 8, children: [
               if (isRead)
-                _StatusChip(
-                    icon: Icons.check_rounded,
-                    label: 'Прочитано',
-                    color: cs.primary),
+                _StatusChip(icon: Icons.check_rounded, label: 'Прочитано', color: cs.primary),
               if (isPinned)
-                _StatusChip(
-                    icon: Icons.push_pin_rounded,
-                    label: 'Закреплено',
-                    color: cs.tertiary),
+                _StatusChip(icon: Icons.push_pin_rounded, label: 'Закреплено', color: cs.tertiary),
             ]),
           ],
         ]),
@@ -193,17 +155,14 @@ class PoemDetailScreen extends ConsumerWidget {
   }
 }
 
-// ── Кнопка удалить из библиотеки ─────────────────────────────────────────────
-
 class _DeleteFromLibraryButton extends ConsumerWidget {
   final Poem poem;
-  final dynamic entry; // LibraryPoem
+  final dynamic entry;
   const _DeleteFromLibraryButton({required this.poem, required this.entry});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-
     return Column(children: [
       const SizedBox(height: 32),
       const Divider(),
@@ -214,17 +173,13 @@ class _DeleteFromLibraryButton extends ConsumerWidget {
             context: context,
             builder: (ctx) => AlertDialog(
               backgroundColor: cs.surface,
-              shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18)),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
               title: Text('Удалить из библиотеки?',
-                  style: GoogleFonts.playfairDisplay(
-                      fontWeight: FontWeight.w600)),
+                  style: GoogleFonts.playfairDisplay(fontWeight: FontWeight.w600)),
               content: Text('Стихотворение будет удалено из вашей библиотеки.',
                   style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant)),
               actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Отмена')),
+                TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Отмена')),
                 FilledButton(
                   onPressed: () => Navigator.pop(ctx, true),
                   style: FilledButton.styleFrom(backgroundColor: cs.error),
@@ -249,8 +204,6 @@ class _DeleteFromLibraryButton extends ConsumerWidget {
   }
 }
 
-// ── Кнопка добавить в библиотеку (для fromPopular) ───────────────────────────
-
 class _AddToLibraryButton extends ConsumerWidget {
   final Poem poem;
   const _AddToLibraryButton({required this.poem});
@@ -258,16 +211,13 @@ class _AddToLibraryButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final cs = Theme.of(context).colorScheme;
-
     return Column(children: [
       const SizedBox(height: 32),
       const Divider(),
       const SizedBox(height: 12),
       GestureDetector(
         onTap: () async {
-          final err = await ref
-              .read(myLibraryProvider.notifier)
-              .addPoem(poem.id);
+          final err = await ref.read(myLibraryProvider.notifier).addPoem(poem.id);
           if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(SnackBar(
               content: Text(err ?? 'Добавлено в библиотеку'),
@@ -286,8 +236,6 @@ class _AddToLibraryButton extends ConsumerWidget {
   }
 }
 
-// ── Shared widgets ────────────────────────────────────────────────────────────
-
 class _AppBarAction extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -304,9 +252,7 @@ class _AppBarAction extends StatelessWidget {
         decoration: BoxDecoration(
           color: active ? cs.primary.withOpacity(0.15) : cs.surfaceVariant,
           borderRadius: BorderRadius.circular(11),
-          border: Border.all(
-              color: active ? cs.primary.withOpacity(0.4) : cs.outline,
-              width: 0.8),
+          border: Border.all(color: active ? cs.primary.withOpacity(0.4) : cs.outline, width: 0.8),
         ),
         child: Icon(icon, color: active ? cs.primary : cs.onSurface, size: 18),
       ),
@@ -333,8 +279,7 @@ class _StatusChip extends StatelessWidget {
         Icon(icon, size: 13, color: color),
         const SizedBox(width: 5),
         Text(label,
-            style: GoogleFonts.notoSerif(
-                color: color, fontSize: 12, fontWeight: FontWeight.w500)),
+            style: GoogleFonts.notoSerif(color: color, fontSize: 12, fontWeight: FontWeight.w500)),
       ]),
     );
   }

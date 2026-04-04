@@ -1,6 +1,4 @@
 // lib/screens/settings_screen.dart
-// Удалён переключатель "Вкладка Все"
-// Добавлен раздел "Доступ к AI" (перенесён из профиля)
 
 import 'dart:async';
 import 'package:flutter/material.dart';
@@ -35,7 +33,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   int _resendCooldown = 0;
   Timer? _cooldownTimer;
 
-  // AI ключ
   final _keyCtrl = TextEditingController();
   bool _keyLoading = false;
   String? _keyError;
@@ -56,7 +53,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final newName = _usernameCtrl.text.trim();
     if (newName.isEmpty) return;
     setState(() { _usernameLoading = true; _usernameError = null; _usernameSuccess = null; });
-    final err = await ref.read(authProvider.notifier).changeUsername(newName);
+    // ← userProfileProvider вместо authProvider
+    final err = await ref.read(userProfileProvider.notifier).changeUsername(newName);
     if (mounted) {
       setState(() {
         _usernameLoading = false;
@@ -83,7 +81,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       return;
     }
     setState(() { _emailLoading = true; _emailError = null; _emailSuccess = null; });
-    final err = await ref.read(authProvider.notifier).requestEmailChange(newEmail);
+    // ← userProfileProvider
+    final err = await ref.read(userProfileProvider.notifier).requestEmailChange(newEmail);
     if (mounted) {
       setState(() {
         _emailLoading = false;
@@ -102,7 +101,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final code = _oldCodeCtrl.text.trim();
     if (code.length != 6) { setState(() => _emailError = 'Введите 6-значный код'); return; }
     setState(() { _emailLoading = true; _emailError = null; _emailSuccess = null; });
-    final err = await ref.read(authProvider.notifier).confirmOldEmailCode(code);
+    // ← userProfileProvider
+    final err = await ref.read(userProfileProvider.notifier).confirmOldEmailCode(code);
     if (mounted) {
       setState(() {
         _emailLoading = false;
@@ -116,7 +116,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     final code = _newCodeCtrl.text.trim();
     if (code.length != 6) { setState(() => _emailError = 'Введите 6-значный код'); return; }
     setState(() { _emailLoading = true; _emailError = null; _emailSuccess = null; });
-    final err = await ref.read(authProvider.notifier).confirmNewEmailCode(_pendingNewEmail, code);
+    // ← userProfileProvider
+    final err = await ref.read(userProfileProvider.notifier).confirmNewEmailCode(_pendingNewEmail, code);
     if (mounted) {
       setState(() {
         _emailLoading = false;
@@ -180,12 +181,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       body: ListView(
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
         children: [
-          // Внешний вид
           _AppearanceCard(),
           const SizedBox(height: 12),
 
           if (user != null) ...[
-            // AI ключ
             _SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _SectionTitle('Доступ к AI'),
               const SizedBox(height: 4),
@@ -193,15 +192,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant, fontSize: 12.5)),
               const SizedBox(height: 14),
               Row(children: [
-                Expanded(child: _SettingsField(
-                    controller: _keyCtrl, label: 'Ключ доступа',
-                    icon: Icons.vpn_key_outlined)),
+                Expanded(child: _SettingsField(controller: _keyCtrl, label: 'Ключ доступа', icon: Icons.vpn_key_outlined)),
                 const SizedBox(width: 10),
                 SizedBox(height: 50, child: FilledButton(
                   onPressed: _keyLoading ? null : _verifyKey,
                   child: _keyLoading
-                      ? const SizedBox(width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : Text('OK', style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600)),
                 )),
               ]),
@@ -210,7 +206,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ])),
             const SizedBox(height: 12),
 
-            // Смена никнейма
             _SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _SectionTitle('Изменить никнейм'),
               const SizedBox(height: 6),
@@ -223,8 +218,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                 SizedBox(height: 50, child: FilledButton(
                   onPressed: _usernameLoading ? null : _changeUsername,
                   child: _usernameLoading
-                      ? const SizedBox(width: 18, height: 18,
-                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : Text('OK', style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600)),
                 )),
               ]),
@@ -233,7 +227,6 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             ])),
             const SizedBox(height: 12),
 
-            // Смена email
             _SectionCard(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _SectionTitle('Изменить email'),
               const SizedBox(height: 6),
