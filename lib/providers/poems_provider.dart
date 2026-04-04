@@ -8,11 +8,6 @@ import 'auth_provider.dart';
 
 part 'poems_provider.g.dart';
 
-// УДАЛИТЕ эти строки в конце файла:
-// final poemsProvider = poemsProvider$;
-// final searchQueryProvider = searchQueryProvider$;
-// final filteredPoemsProvider = filteredPoemsProvider$;
-
 @riverpod
 class Poems extends _$Poems {
   DatabaseService get _db => ref.read(dbServiceProvider);
@@ -42,7 +37,7 @@ class Poems extends _$Poems {
       final result = await _sync.syncPoems();
       if (result == SyncResult.success) {
         final updated = await _db.getAllPoems();
-        if (mounted) state = AsyncValue.data(updated);
+        state = AsyncValue.data(updated);  // ← без mounted
       }
     } catch (e) {
       debugPrint('[Poems] Ошибка фоновой синхронизации: $e');

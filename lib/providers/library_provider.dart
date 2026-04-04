@@ -31,6 +31,11 @@ class MyLibrary extends _$MyLibrary {
     }
   }
 
+  // Метод load для совместимости с library_screen.dart
+  Future<void> load() async {
+    await reload();
+  }
+
   Future<void> reload() async {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(_load);
@@ -182,5 +187,3 @@ class MyLibrary extends _$MyLibrary {
     return [...pinned, ...rest];
   }
 }
-
-// final myLibraryProvider = myLibraryProvider$;
