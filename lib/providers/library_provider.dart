@@ -16,9 +16,16 @@ class MyLibrary extends _$MyLibrary {
   SyncService get _sync => ref.read(syncServiceProvider);
 
   String? get _username => ref.read(authProvider).value?.username;
+  
+  bool _isDisposed = false;
 
   @override
-  Future<LibraryState?> build() => _load();
+  Future<LibraryState?> build() {
+    ref.onDispose(() {
+      _isDisposed = true;
+    });
+    return _load();
+  }
 
   Future<LibraryState?> _load() async {
     final username = _username;
@@ -67,7 +74,10 @@ class MyLibrary extends _$MyLibrary {
       if (data == null) return;
       final fresh = LibraryState.fromJson(data);
       await _db.saveLibrary(username, fresh);
-      if (ref.mounted) state = AsyncValue.data(fresh);
+      // Проверяем, не уничтожен ли провайдер
+      if (!_isDisposed) {
+        state = AsyncValue.data(fresh);
+      }
     } catch (e) {
       debugPrint('[MyLibrary] Ошибка фоновой синхронизации: $e');
     }
@@ -81,16 +91,20 @@ class MyLibrary extends _$MyLibrary {
     // Показываем кеш пока грузим
     if (username != null) {
       final cached = await _db.loadLibrary(username);
-      if (cached != null) state = AsyncValue.data(cached);
+      if (cached != null && !_isDisposed) {
+        state = AsyncValue.data(cached);
+      }
     }
 
     if (!await _sync.isOnline()) return;
 
     try {
       final fresh = await _fetchFromServer(username);
-      if (ref.mounted) state = AsyncValue.data(fresh);
+      if (!_isDisposed && fresh != null) {
+        state = AsyncValue.data(fresh);
+      }
     } catch (e) {
-      if (state is! AsyncData) {
+      if (!_isDisposed && state is! AsyncData) {
         state = AsyncValue.error(e, StackTrace.current);
       }
     }
@@ -143,8 +157,9 @@ class MyLibrary extends _$MyLibrary {
     }
   }
 
-  /// toggleRead — работает офлайн, синхронизируется при наличии сети
   Future<void> toggleRead(int entryId) async {
+    if (_isDisposed) return;
+    
     final current = state.value;
     if (current == null) return;
     final username = _username;
@@ -154,7 +169,10 @@ class MyLibrary extends _$MyLibrary {
       if (p.id == entryId) return p.copyWith(isRead: !p.isRead);
       return p;
     }).toList();
-    state = AsyncValue.data(current.copyWith(poems: updated));
+    
+    if (!_isDisposed) {
+      state = AsyncValue.data(current.copyWith(poems: updated));
+    }
 
     // Локальный кеш
     if (username != null) await _db.toggleLibraryPoemRead(username, entryId);
@@ -172,8 +190,9 @@ class MyLibrary extends _$MyLibrary {
     }
   }
 
-  /// togglePin — работает офлайн, синхронизируется при наличии сети
   Future<String?> togglePin(int entryId) async {
+    if (_isDisposed) return 'Ошибка';
+    
     final current = state.value;
     if (current == null) return 'Ошибка';
     final username = _username;
@@ -195,7 +214,10 @@ class MyLibrary extends _$MyLibrary {
       if (p.id == entryId) return p.copyWith(isPinned: newPinned);
       return p;
     }).toList();
-    state = AsyncValue.data(current.copyWith(poems: updated));
+    
+    if (!_isDisposed) {
+      state = AsyncValue.data(current.copyWith(poems: updated));
+    }
 
     // Локальный кеш
     if (username != null) {
@@ -213,7 +235,9 @@ class MyLibrary extends _$MyLibrary {
             if (p.id == entryId) return p.copyWith(isPinned: !newPinned);
             return p;
           }).toList();
-          state = AsyncValue.data(current.copyWith(poems: rolled));
+          if (!_isDisposed) {
+            state = AsyncValue.data(current.copyWith(poems: rolled));
+          }
           if (username != null) {
             await _db.setLibraryPoemPinned(username, entryId, !newPinned);
           }
