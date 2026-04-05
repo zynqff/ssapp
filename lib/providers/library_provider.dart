@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/library.dart';
 import '../services/api_service.dart';
+import '../services/sync_service.dart';
 import 'auth_provider.dart';
 
 part 'library_provider.g.dart';
@@ -10,11 +11,32 @@ part 'library_provider.g.dart';
 @riverpod
 class MyLibrary extends _$MyLibrary {
   ApiService get _api => ref.read(apiServiceProvider);
+  DatabaseService get _db => ref.read(dbServiceProvider);
+  SyncService get _sync => ref.read(syncServiceProvider);
+
+  String? get _username => ref.read(authProvider).value?.username;
 
   @override
   Future<LibraryState?> build() => _load();
 
   Future<LibraryState?> _load() async {
+    final username = _username;
+
+    // 1. Сразу отдаём локальный кеш если есть
+    if (username != null) {
+      final cached = await _db.loadLibrary(username);
+      if (cached != null) {
+        Future.microtask(() => _syncInBackground(username));
+        return cached;
+      }
+    }
+
+    // 2. Кеша нет — пробуем загрузить с сервера
+    if (!await _sync.isOnline()) return null;
+    return _fetchFromServer(username);
+  }
+
+  Future<LibraryState?> _fetchFromServer(String? username) async {
     try {
       final data = await _api.getMyLibrary().timeout(
         const Duration(seconds: 15),
@@ -23,22 +45,54 @@ class MyLibrary extends _$MyLibrary {
           return null;
         },
       );
-      if (data == null) throw Exception('Не удалось загрузить библиотеку. Проверь интернет.');
-      return LibraryState.fromJson(data);
+      if (data == null) {
+        throw Exception('Не удалось загрузить библиотеку. Проверь интернет.');
+      }
+      final s = LibraryState.fromJson(data);
+      if (username != null) await _db.saveLibrary(username, s);
+      return s;
     } catch (e) {
       debugPrint('[MyLibrary] Ошибка загрузки: $e');
       rethrow;
     }
   }
 
-  // Метод load для совместимости с library_screen.dart
-  Future<void> load() async {
-    await reload();
+  Future<void> _syncInBackground(String username) async {
+    if (!await _sync.isOnline()) return;
+    try {
+      final data = await _api
+          .getMyLibrary()
+          .timeout(const Duration(seconds: 20), onTimeout: () => null);
+      if (data == null) return;
+      final fresh = LibraryState.fromJson(data);
+      await _db.saveLibrary(username, fresh);
+      if (mounted) state = AsyncValue.data(fresh);
+    } catch (e) {
+      debugPrint('[MyLibrary] Ошибка фоновой синхронизации: $e');
+    }
   }
 
+  Future<void> load() async => reload();
+
   Future<void> reload() async {
-    state = const AsyncValue.loading();
-    state = await AsyncValue.guard(_load);
+    final username = _username;
+
+    // Показываем кеш пока грузим
+    if (username != null) {
+      final cached = await _db.loadLibrary(username);
+      if (cached != null) state = AsyncValue.data(cached);
+    }
+
+    if (!await _sync.isOnline()) return;
+
+    try {
+      final fresh = await _fetchFromServer(username);
+      if (mounted) state = AsyncValue.data(fresh);
+    } catch (e) {
+      if (state is! AsyncData) {
+        state = AsyncValue.error(e, StackTrace.current);
+      }
+    }
   }
 
   Future<String?> addPoem(int poemId) async {
@@ -52,9 +106,14 @@ class MyLibrary extends _$MyLibrary {
     }
   }
 
-  Future<String?> addCustomPoem({required String title, required String author, required String text}) async {
+  Future<String?> addCustomPoem({
+    required String title,
+    required String author,
+    required String text,
+  }) async {
     try {
-      final err = await _api.addCustomPoemToLibrary(title: title, author: author, text: text);
+      final err = await _api.addCustomPoemToLibrary(
+          title: title, author: author, text: text);
       if (err == null) await reload();
       return err;
     } catch (e) {
@@ -83,41 +142,90 @@ class MyLibrary extends _$MyLibrary {
     }
   }
 
+  /// toggleRead — работает офлайн, синхронизируется при наличии сети
   Future<void> toggleRead(int entryId) async {
     final current = state.value;
     if (current == null) return;
-    try {
-      final updated = current.poems.map((p) {
-        if (p.id == entryId) return p.copyWith(isRead: !p.isRead);
-        return p;
-      }).toList();
-      state = AsyncValue.data(current.copyWith(poems: updated));
-      await _api.toggleLibraryPoemRead(entryId);
-    } catch (e) {
-      debugPrint('[MyLibrary] toggleRead: $e');
-      await reload();
+    final username = _username;
+
+    // Оптимистичное обновление UI
+    final updated = current.poems.map((p) {
+      if (p.id == entryId) return p.copyWith(isRead: !p.isRead);
+      return p;
+    }).toList();
+    state = AsyncValue.data(current.copyWith(poems: updated));
+
+    // Локальный кеш
+    if (username != null) await _db.toggleLibraryPoemRead(username, entryId);
+
+    // Сервер
+    if (await _sync.isOnline()) {
+      try {
+        await _api.toggleLibraryPoemRead(entryId);
+      } catch (e) {
+        debugPrint('[MyLibrary] toggleRead sync: $e');
+        await _db.addToSyncQueue('library_toggle_read', '{"entry_id":$entryId}');
+      }
+    } else {
+      await _db.addToSyncQueue('library_toggle_read', '{"entry_id":$entryId}');
     }
   }
 
+  /// togglePin — работает офлайн, синхронизируется при наличии сети
   Future<String?> togglePin(int entryId) async {
-    try {
-      final res = await _api.toggleLibraryPoemPin(entryId);
-      if (res == null) return 'Ошибка';
-      if (res['error'] != null) return res['error'] as String;
-      final current = state.value;
-      if (current != null) {
-        final isPinned = res['is_pinned'] as bool? ?? false;
-        final updated = current.poems.map((p) {
-          if (p.id == entryId) return p.copyWith(isPinned: isPinned);
-          return p;
-        }).toList();
-        state = AsyncValue.data(current.copyWith(poems: updated));
+    final current = state.value;
+    if (current == null) return 'Ошибка';
+    final username = _username;
+
+    final entry = current.poems.firstWhere((p) => p.id == entryId,
+        orElse: () => throw Exception('not found'));
+    final newPinned = !entry.isPinned;
+
+    // Проверяем лимит офлайн
+    if (newPinned) {
+      final count = current.poems.where((p) => p.isPinned).length;
+      if (count >= 3) {
+        return 'Максимум 3 закреплённых стиха. Открепите один из уже закреплённых.';
       }
-      return null;
-    } catch (e) {
-      debugPrint('[MyLibrary] togglePin: $e');
-      return 'Ошибка: $e';
     }
+
+    // Оптимистичное обновление UI
+    final updated = current.poems.map((p) {
+      if (p.id == entryId) return p.copyWith(isPinned: newPinned);
+      return p;
+    }).toList();
+    state = AsyncValue.data(current.copyWith(poems: updated));
+
+    // Локальный кеш
+    if (username != null) {
+      await _db.setLibraryPoemPinned(username, entryId, newPinned);
+    }
+
+    // Сервер
+    if (await _sync.isOnline()) {
+      try {
+        final res = await _api.toggleLibraryPoemPin(entryId);
+        if (res == null) return 'Ошибка';
+        if (res['error'] != null) {
+          // Откатываем
+          final rolled = current.poems.map((p) {
+            if (p.id == entryId) return p.copyWith(isPinned: !newPinned);
+            return p;
+          }).toList();
+          state = AsyncValue.data(current.copyWith(poems: rolled));
+          if (username != null) {
+            await _db.setLibraryPoemPinned(username, entryId, !newPinned);
+          }
+          return res['error'] as String;
+        }
+      } catch (e) {
+        debugPrint('[MyLibrary] togglePin sync: $e');
+        await _db.addToSyncQueue('library_toggle_pin', '{"entry_id":$entryId}');
+      }
+    } else {
+      await _db.addToSyncQueue('library_toggle_pin', '{"entry_id":$entryId}');
+    }
+    return null;
   }
 
   Future<String?> updateInfo(String name, String description) async {
@@ -156,7 +264,17 @@ class MyLibrary extends _$MyLibrary {
   Future<String?> deleteLibrary() async {
     try {
       final err = await _api.deleteMyLibrary();
-      if (err == null) await reload();
+      if (err == null) {
+        final username = _username;
+        if (username != null) {
+          final d = await _db.db;
+          await d.delete('local_library',
+              where: 'username=?', whereArgs: [username]);
+          await d.delete('local_library_poems',
+              where: 'username=?', whereArgs: [username]);
+        }
+        await reload();
+      }
       return err;
     } catch (e) {
       debugPrint('[MyLibrary] deleteLibrary: $e');
@@ -164,7 +282,10 @@ class MyLibrary extends _$MyLibrary {
     }
   }
 
-  List<LibraryPoem> sorted({required LibrarySortBy sortBy, required SortDir dir}) {
+  List<LibraryPoem> sorted({
+    required LibrarySortBy sortBy,
+    required SortDir dir,
+  }) {
     var poems = List<LibraryPoem>.from(state.value?.poems ?? []);
     if (sortBy == LibrarySortBy.read) {
       poems = poems.where((p) => p.isRead).toList();
@@ -175,15 +296,23 @@ class MyLibrary extends _$MyLibrary {
     var rest = poems.where((p) => !p.isPinned).toList();
     int Function(LibraryPoem, LibraryPoem) cmp;
     switch (sortBy) {
-      case LibrarySortBy.title:  cmp = (a, b) => a.title.compareTo(b.title);
-      case LibrarySortBy.author: cmp = (a, b) => a.author.compareTo(b.author);
-      case LibrarySortBy.length: cmp = (a, b) => a.lineCount.compareTo(b.lineCount);
-      default:                   cmp = (a, b) => a.id.compareTo(b.id);
+      case LibrarySortBy.title:
+        cmp = (a, b) => a.title.compareTo(b.title);
+      case LibrarySortBy.author:
+        cmp = (a, b) => a.author.compareTo(b.author);
+      case LibrarySortBy.length:
+        cmp = (a, b) => a.lineCount.compareTo(b.lineCount);
+      default:
+        cmp = (a, b) => a.id.compareTo(b.id);
     }
     rest.sort(cmp);
-    if (dir == SortDir.desc && sortBy != LibrarySortBy.read && sortBy != LibrarySortBy.unread) {
+    if (dir == SortDir.desc &&
+        sortBy != LibrarySortBy.read &&
+        sortBy != LibrarySortBy.unread) {
       rest = rest.reversed.toList();
     }
     return [...pinned, ...rest];
   }
 }
+
+final myLibraryProvider = myLibraryProvider$;

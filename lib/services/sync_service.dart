@@ -61,6 +61,14 @@ class SyncService {
               showAllTab: payload['show_all_tab'] as bool?,
             );
             ok = error == null;
+          case 'library_toggle_read':
+            final entryId = (payload['entry_id'] as num).toInt();
+            final result = await _api.toggleLibraryPoemRead(entryId);
+            ok = result != null;
+          case 'library_toggle_pin':
+            final entryId = (payload['entry_id'] as num).toInt();
+            final result = await _api.toggleLibraryPoemPin(entryId);
+            ok = result != null && result['error'] == null;
         }
       } catch (e) {
         debugPrint('[SyncService] Ошибка обработки очереди ($action): $e');

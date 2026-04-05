@@ -1,5 +1,4 @@
 // lib/screens/profile_screen.dart
-// Фикс #6: пустая библиотека показывает 0/0/0%, не старые глобальные данные
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,7 +27,8 @@ class ProfileScreen extends ConsumerWidget {
                 color: cs.onSurface, fontSize: 22, fontWeight: FontWeight.w600)),
       ),
       body: userAsync.when(
-        loading: () => Center(child: CircularProgressIndicator(color: cs.primary)),
+        // ── Загрузка: показываем скелетон вместо спиннера чтобы не было серого экрана
+        loading: () => _buildSkeleton(cs),
         error: (_, __) => const SizedBox.shrink(),
         data: (user) {
           if (user == null) {
@@ -54,17 +54,14 @@ class ProfileScreen extends ConsumerWidget {
                         MaterialPageRoute(builder: (_) => const LoginScreen())),
                     icon: const Icon(Icons.login_rounded),
                     label: Text('Войти',
-                        style: GoogleFonts.notoSerif(
-                            fontWeight: FontWeight.w600)),
+                        style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600)),
                   ),
                 ]),
               ),
             );
           }
 
-          // #6: Считаем прогресс.
-          // Если библиотека загружена — используем её данные (даже если пустая → 0/0/0%).
-          // Только если библиотека ещё не загружена (null/loading) — используем глобальный счётчик.
+          // Статистика — берём из библиотеки если загружена, иначе из auth (офлайн данные)
           final libState = libAsync.valueOrNull;
           final libLoaded = libAsync is AsyncData;
 
@@ -74,22 +71,15 @@ class ProfileScreen extends ConsumerWidget {
           String? libName;
 
           if (libLoaded && libState != null) {
-            // Библиотека загружена — всегда берём её данные
             total = libState.poems.length;
             readCount = libState.poems.where((p) => p.isRead).length;
             pct = total > 0 ? ((readCount / total) * 100).round() : 0;
             libName = libState.library.name;
-          } else if (!libLoaded) {
-            // Библиотека ещё грузится — показываем глобальные данные как заглушку
+          } else {
+            // Офлайн или библиотека ещё не загружена — глобальные данные из кеша auth
             readCount = user.readPoems.length;
             total = globalPoems.length;
             pct = total > 0 ? ((readCount / total) * 100).round() : 0;
-            libName = null;
-          } else {
-            // libState == null (ошибка загрузки библиотеки)
-            readCount = 0;
-            total = 0;
-            pct = 0;
             libName = null;
           }
 
@@ -113,16 +103,34 @@ class ProfileScreen extends ConsumerWidget {
                       )),
                     ),
                     const SizedBox(width: 14),
-                    Text(user.username,
-                        style: GoogleFonts.playfairDisplay(
-                            color: cs.onSurface, fontSize: 20,
-                            fontWeight: FontWeight.w600)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(user.username,
+                              style: GoogleFonts.playfairDisplay(
+                                  color: cs.onSurface, fontSize: 20,
+                                  fontWeight: FontWeight.w600)),
+                          // Индикатор офлайн режима
+                          if (!libLoaded)
+                            Row(children: [
+                              Icon(Icons.wifi_off_rounded,
+                                  size: 11, color: cs.onSurfaceVariant.withOpacity(0.5)),
+                              const SizedBox(width: 4),
+                              Text('офлайн',
+                                  style: GoogleFonts.notoSerif(
+                                      color: cs.onSurfaceVariant.withOpacity(0.5),
+                                      fontSize: 11,
+                                      fontStyle: FontStyle.italic)),
+                            ]),
+                        ],
+                      ),
+                    ),
                   ]),
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     child: Divider(color: cs.outline.withOpacity(0.4), height: 1),
                   ),
-                  // Подпись библиотеки
                   if (libName != null)
                     Padding(
                       padding: const EdgeInsets.only(bottom: 8),
@@ -146,24 +154,21 @@ class ProfileScreen extends ConsumerWidget {
                       _Stat(label: 'Прогресс', value: '$pct%'),
                     ],
                   ),
-                  // Закреплённый стих: берём из библиотеки (#7), fallback — из auth
+                  // Закреплённый стих
                   Builder(builder: (context) {
                     String? pinnedTitle;
-
-                    // Сначала ищем закреплённый в библиотеке
-                    final pinned = libState?.poems.where((p) => p.isPinned).toList() ?? [];
+                    final pinned =
+                        libState?.poems.where((p) => p.isPinned).toList() ?? [];
                     if (pinned.isNotEmpty) {
                       pinnedTitle = pinned.first.title;
                     } else if (user.pinnedPoemId != null) {
-                      // Fallback — глобальный пин
                       pinnedTitle = globalPoems
-                          .where((p) => p.id == user.pinnedPoemId)
-                          .firstOrNull
-                          ?.title ?? '#${user.pinnedPoemId}';
+                              .where((p) => p.id == user.pinnedPoemId)
+                              .firstOrNull
+                              ?.title ??
+                          '#${user.pinnedPoemId}';
                     }
-
                     if (pinnedTitle == null) return const SizedBox.shrink();
-
                     return Column(children: [
                       Padding(
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -185,7 +190,6 @@ class ProfileScreen extends ConsumerWidget {
               )),
               const SizedBox(height: 20),
 
-              // Настройки
               SizedBox(
                 width: double.infinity, height: 48,
                 child: FilledButton.icon(
@@ -202,7 +206,6 @@ class ProfileScreen extends ConsumerWidget {
               ),
               const SizedBox(height: 10),
 
-              // Выйти
               SizedBox(
                 width: double.infinity, height: 48,
                 child: OutlinedButton.icon(
@@ -222,6 +225,46 @@ class ProfileScreen extends ConsumerWidget {
           );
         },
       ),
+    );
+  }
+
+  // Скелетон вместо серого экрана — показывает структуру пока грузится auth
+  Widget _buildSkeleton(ColorScheme cs) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+      children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: cs.surfaceVariant.withOpacity(0.6),
+            borderRadius: BorderRadius.circular(18),
+            border: Border.all(color: cs.outline.withOpacity(0.5), width: 0.8),
+          ),
+          child: Column(children: [
+            Row(children: [
+              _SkeletonBox(width: 52, height: 52, radius: 16),
+              const SizedBox(width: 14),
+              _SkeletonBox(width: 120, height: 20, radius: 6),
+            ]),
+            const SizedBox(height: 16),
+            Divider(color: cs.outline.withOpacity(0.4), height: 1),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _SkeletonBox(width: 50, height: 40, radius: 6),
+                _SkeletonBox(width: 50, height: 40, radius: 6),
+                _SkeletonBox(width: 50, height: 40, radius: 6),
+              ],
+            ),
+          ]),
+        ),
+        const SizedBox(height: 20),
+        _SkeletonBox(width: double.infinity, height: 48, radius: 14),
+        const SizedBox(height: 10),
+        _SkeletonBox(width: double.infinity, height: 48, radius: 14),
+      ],
     );
   }
 
@@ -308,6 +351,27 @@ class ProfileScreen extends ConsumerWidget {
     if (confirmed == true) {
       await ref.read(authProvider.notifier).logout();
     }
+  }
+}
+
+class _SkeletonBox extends StatelessWidget {
+  final double width;
+  final double height;
+  final double radius;
+  const _SkeletonBox(
+      {required this.width, required this.height, required this.radius});
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: cs.outline.withOpacity(0.15),
+        borderRadius: BorderRadius.circular(radius),
+      ),
+    );
   }
 }
 
