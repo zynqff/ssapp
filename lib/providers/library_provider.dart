@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../models/library.dart';
 import '../services/api_service.dart';
+import '../services/database_service.dart';
 import '../services/sync_service.dart';
 import 'auth_provider.dart';
 
@@ -66,7 +67,7 @@ class MyLibrary extends _$MyLibrary {
       if (data == null) return;
       final fresh = LibraryState.fromJson(data);
       await _db.saveLibrary(username, fresh);
-      if (mounted) state = AsyncValue.data(fresh);
+      if (ref.mounted) state = AsyncValue.data(fresh);
     } catch (e) {
       debugPrint('[MyLibrary] Ошибка фоновой синхронизации: $e');
     }
@@ -87,7 +88,7 @@ class MyLibrary extends _$MyLibrary {
 
     try {
       final fresh = await _fetchFromServer(username);
-      if (mounted) state = AsyncValue.data(fresh);
+      if (ref.mounted) state = AsyncValue.data(fresh);
     } catch (e) {
       if (state is! AsyncData) {
         state = AsyncValue.error(e, StackTrace.current);
@@ -314,5 +315,3 @@ class MyLibrary extends _$MyLibrary {
     return [...pinned, ...rest];
   }
 }
-
-// final myLibraryProvider = myLibraryProvider$;
