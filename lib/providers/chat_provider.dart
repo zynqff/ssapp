@@ -29,10 +29,7 @@ class Chat extends _$Chat {
   }
 
   Future<String?> send(String prompt) async {
-    final username = state.valueOrNull != null 
-        ? (build as dynamic).argument 
-        : null;
-    if (username == null) return 'Ошибка: пользователь не определён';
+    final username = arg;
     
     try {
       if (!await SyncService().isOnline()) return 'AI-чат требует интернета';
@@ -60,10 +57,7 @@ class Chat extends _$Chat {
   }
 
   Future<void> clear() async {
-    final username = state.valueOrNull != null 
-        ? (build as dynamic).argument 
-        : null;
-    if (username == null) return;
+    final username = arg;
     try {
       await _db.clearChatHistory(username);
       state = const AsyncValue.data([]);
@@ -73,5 +67,3 @@ class Chat extends _$Chat {
   }
 }
 
-// УДАЛИТЕ эту строку:
-// final chatProvider = chatProvider$;
