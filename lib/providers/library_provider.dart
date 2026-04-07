@@ -228,7 +228,11 @@ class MyLibrary extends _$MyLibrary {
     if (await _sync.isOnline()) {
       try {
         final res = await _api.toggleLibraryPoemPin(entryId);
-        if (res == null) return 'Ошибка';
+        if (res == null) {
+          // Сервер не ответил — откладываем синхронизацию
+          await _db.addToSyncQueue('library_toggle_pin', '{"entry_id":$entryId}');
+          return null;
+        }
         if (res['error'] != null) {
           // Откатываем
           final rolled = current.poems.map((p) {
