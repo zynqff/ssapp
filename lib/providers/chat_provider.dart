@@ -16,10 +16,12 @@ class Chat extends _$Chat {
 
   bool _sending = false;
   bool get isSending => _sending;
+  
+  late final String _username;
 
-  // Аргумент передаётся через build
   @override
   Future<List<ChatMessage>> build(String username) async {
+    _username = username;
     try {
       return await _db.getChatHistory(username);
     } catch (e) {
@@ -29,13 +31,15 @@ class Chat extends _$Chat {
   }
 
   Future<String?> send(String prompt) async {
-    final username = arg;
-    
     try {
       if (!await SyncService().isOnline()) return 'AI-чат требует интернета';
 
-      final userMsg = ChatMessage(role: 'user', content: prompt, createdAt: DateTime.now());
-      await _db.saveChatMessage(username, userMsg);
+      final userMsg = ChatMessage(
+        role: 'user',
+        content: prompt,
+        createdAt: DateTime.now(),
+      );
+      await _db.saveChatMessage(_username, userMsg);
       state = AsyncValue.data([...?state.value, userMsg]);
 
       _sending = true;
@@ -45,8 +49,12 @@ class Chat extends _$Chat {
       if (response == null) return 'Ошибка при обращении к AI';
       if (response == '__no_access__') return 'Нет доступа к AI. Введите ключ в профиле.';
 
-      final modelMsg = ChatMessage(role: 'model', content: response, createdAt: DateTime.now());
-      await _db.saveChatMessage(username, modelMsg);
+      final modelMsg = ChatMessage(
+        role: 'model',
+        content: response,
+        createdAt: DateTime.now(),
+      );
+      await _db.saveChatMessage(_username, modelMsg);
       state = AsyncValue.data([...?state.value, modelMsg]);
       return null;
     } catch (e) {
@@ -57,13 +65,11 @@ class Chat extends _$Chat {
   }
 
   Future<void> clear() async {
-    final username = arg;
     try {
-      await _db.clearChatHistory(username);
+      await _db.clearChatHistory(_username);
       state = const AsyncValue.data([]);
     } catch (e) {
       debugPrint('[Chat] Ошибка очистки: $e');
     }
   }
 }
-
