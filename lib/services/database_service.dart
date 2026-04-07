@@ -362,6 +362,11 @@ class DatabaseService {
       );
 
       // Мигрируем локальную библиотеку
+      // Сначала удаляем возможные конфликтующие записи нового username
+      await txn.delete('local_library_poems',
+          where: 'username=?', whereArgs: [newUsername]);
+      await txn.delete('local_library',
+          where: 'username=?', whereArgs: [newUsername]);
       await txn.rawUpdate(
         'UPDATE local_library SET username=? WHERE username=?',
         [newUsername, oldUsername],
