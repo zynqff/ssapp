@@ -68,7 +68,9 @@ class SyncService {
           case 'library_toggle_pin':
             final entryId = (payload['entry_id'] as num).toInt();
             final result = await _api.toggleLibraryPoemPin(entryId);
-            ok = result != null && result['error'] == null;
+            // null = сервер не ответил, оставляем в очереди
+            // error в теле = сервер отклонил (лимит и т.д.) — удаляем чтобы не зациклиться
+            ok = result != null;
         }
       } catch (e) {
         debugPrint('[SyncService] Ошибка обработки очереди ($action): $e');
