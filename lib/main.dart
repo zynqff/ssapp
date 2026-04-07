@@ -270,7 +270,7 @@ class _ServerErrorScreen extends ConsumerWidget {
       const SizedBox(height: 24),
       FilledButton.icon(onPressed: () { ref.invalidate(authProvider); ref.invalidate(poemsProvider); ref.invalidate(configProvider); }, icon: const Icon(Icons.refresh_rounded), label: Text('Повторить', style: GoogleFonts.notoSerif(fontWeight: FontWeight.w600))),
       const SizedBox(height: 12),
-      TextButton(onPressed: () {}, child: Text('Попробовать позже', style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant))),
+      TextButton(onPressed: () { ref.invalidate(authProvider); ref.invalidate(poemsProvider); ref.invalidate(configProvider); }, child: Text('Попробовать позже', style: GoogleFonts.notoSerif(color: cs.onSurfaceVariant))),
     ]))));
   }
 }
