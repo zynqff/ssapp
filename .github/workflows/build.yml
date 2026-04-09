@@ -70,9 +70,10 @@ jobs:
           rm -rf android/app/src/main/res/mipmap-xxxhdpi
           dart run flutter_launcher_icons
 
-      # ← НОВЫЙ ШАГ: генерация сплеш-экрана
+      # ⬇️⬇️⬇️ ЭТОТ ШАГ НУЖНО ДОБАВИТЬ ⬇️⬇️⬇️
       - name: Generate splash screen
         run: dart run flutter_native_splash:create
+      # ⬆️⬆️⬆️ ЭТОТ ШАГ НУЖНО ДОБАВИТЬ ⬆️⬆️⬆️
 
       - name: Create gradlew
         run: |
