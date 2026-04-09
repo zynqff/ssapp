@@ -32,6 +32,7 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^4.0.0
   flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.0  # ← ДОБАВИТЬ
   sqflite_common_ffi: ^2.3.3
   build_runner: ^2.4.0
   riverpod_generator: ^2.4.0
@@ -41,6 +42,14 @@ flutter_launcher_icons:
   ios: false
   image_path: "assets/icon/icon.png"
   min_sdk_android: 21
+
+# ← ДОБАВИТЬ ВЕСЬ БЛОК НИЖЕ
+flutter_native_splash:
+  color: "#000000"
+  image: assets/icon/splash.png
+  android_12:
+    color: "#000000"
+    image: assets/icon/splash.png
 
 flutter:
   uses-material-design: true
