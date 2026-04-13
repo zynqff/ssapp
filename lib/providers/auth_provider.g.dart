@@ -54,7 +54,7 @@ final syncServiceProvider = AutoDisposeProvider<SyncService>.internal(
 @Deprecated('Will be removed in 3.0. Use Ref instead')
 // ignore: unused_element
 typedef SyncServiceRef = AutoDisposeProviderRef<SyncService>;
-String _$authHash() => r'8c121532a39b60e438aa86f42cfdd3261a7de42b';
+String _$authHash() => r'2f6a3334c51166ba3620a15865653e052743bb96';
 
 /// See also [Auth].
 @ProviderFor(Auth)
