@@ -89,9 +89,22 @@ class ApiService {
               return handler.next(error);
             }
           } else {
-            // Refresh тоже не прошёл — разлогиниваем
-            debugPrint('[ApiService] ❌ Refresh не прошёл, очищаем токены');
-            await clearTokens();
+            // Refresh не прошёл — очищаем токены ТОЛЬКО если это
+            // реально 401/403 от сервера (т.е. токен невалиден),
+            // но НЕ при сетевой ошибке / таймауте.
+            final refreshStatus = error.response?.statusCode;
+            final isNetworkError = error.type == DioExceptionType.connectionTimeout ||
+                error.type == DioExceptionType.receiveTimeout ||
+                error.type == DioExceptionType.sendTimeout ||
+                error.type == DioExceptionType.connectionError ||
+                error.type == DioExceptionType.cancel;
+
+            if (!isNetworkError) {
+              debugPrint('[ApiService] ❌ Refresh не прошёл (статус $refreshStatus), очищаем токены');
+              await clearTokens();
+            } else {
+              debugPrint('[ApiService] ⚠️ Refresh не прошёл из-за сети, токены сохранены');
+            }
             return handler.next(error);
           }
         }
