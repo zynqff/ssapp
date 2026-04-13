@@ -43,11 +43,16 @@ class Auth extends _$Auth {
 
       final cached = _userFromToken(token);
       if (cached != null) {
+        // Есть кеш — сразу возвращаем его, не ждём сеть.
+        // Сервер обновит данные в фоне без разлогина.
         final readPoems = await _db.getReadPoems(cached.username);
         final pinned = await _db.getPinnedPoem(cached.username);
         Future.microtask(() => _backgroundRefresh(cached.username));
         return cached.copyWith(readPoems: readPoems, pinnedPoemId: pinned);
       }
+
+      // Токена нет в кеше — единственный раз идём на сервер синхронно.
+      // Но даже тут не разлогиниваем при сетевой ошибке.
       return _refreshFromServer();
     } catch (e) {
       debugPrint('[Auth] Ошибка инициализации: $e');
@@ -75,7 +80,9 @@ class Auth extends _$Auth {
     try {
       final data = await _api.getMe();
       if (data == null) {
-        await _api.clearTokens();
+        // Сервер не ответил или вернул ошибку — не трогаем токены,
+        // это может быть временная сетевая проблема.
+        debugPrint('[Auth] getMe вернул null, токены сохранены');
         return null;
       }
       final user = User.fromJson(data);
@@ -92,8 +99,9 @@ class Auth extends _$Auth {
     try {
       final data = await _api.getMe();
       if (data == null) {
-        await _api.clearTokens();
-        state = const AsyncValue.data(null);
+        // Сервер недоступен или временная ошибка — остаёмся в оффлайн-режиме,
+        // токены и состояние НЕ трогаем. Пользователь видит кешированные данные.
+        debugPrint('[Auth] Фоновое обновление: сервер недоступен, работаем из кеша');
         return;
       }
       final user = User.fromJson(data);
@@ -102,6 +110,7 @@ class Auth extends _$Auth {
       await _sync.syncPoems();
     } catch (e) {
       debugPrint('[Auth] Ошибка фонового обновления: $e');
+      // Не разлогиниваем — это может быть просто нет сети.
     }
   }
 
